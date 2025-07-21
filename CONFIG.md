@@ -78,17 +78,6 @@ Several configuration options can be overridden from the command line:
 
 See `example-config.yml` in the project root for a fully documented example configuration.
 
-## Migration from Previous Versions
-
-If you were using Big Bot before the configuration system was introduced, your existing data directory and certificates will continue to work. The bot will automatically generate a fully documented configuration file on first run with the new version.
-
-The generated configuration will use sensible defaults that match the previous behavior:
-- Username: "Big Bot" (can be changed in config)
-- Server: "localhost:64738" (change to your server)
-- Auto greetings: enabled
-- Auto farewells: disabled  
-- Private commands: enabled
-
 ## Behavior Settings Details
 
 The behavior settings provide fine-grained control over the bot's automatic actions:
