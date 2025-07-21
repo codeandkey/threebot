@@ -154,7 +154,6 @@ The new **3-mode system** provides granular control:
 
 # Pull audio from URLs
 !sounds pull https://youtube.com/watch?v=... 1:30 5    # 5 seconds starting at 1:30
-!sounds pull https://twitter.com/user/status/...       # Extract audio from video
 
 # File management
 !sounds scan                   # Find orphaned sound files
@@ -165,22 +164,22 @@ The new **3-mode system** provides granular control:
 ```bash
 # Set personal greetings
 !greeting sounds play welcome     # Play 'welcome' sound when you join
-!greeting alias myhello          # Execute alias when you join
-!greeting                        # Test your current greeting
+!greeting                         # Remove your current greeting
 
 # Set personal farewells
 !farewell sounds play goodbye     # Play 'goodbye' sound when you leave
-!farewell                        # Test your current farewell
+!farewell                         # Remove your current farewell
 ```
 
 ### Command Aliases
 
 ```bash
 # Create command shortcuts
-!alias create myhello "sounds play hello"
-!alias create party "sounds play party && sounds play music"
-!alias list                      # Show all your aliases
-!alias delete myhello           # Remove an alias
+!alias myhello sounds play hello
+!alias party sounds play party; sounds play music
+!alias list                      # Show all available aliases
+!alias delete myhello            # Remove an alias
+!alias search mamamia            # Search existing aliases
 
 # Use aliases
 !myhello                        # Executes the aliased command
@@ -190,7 +189,7 @@ The new **3-mode system** provides granular control:
 
 ```bash
 !ping                           # Test bot responsiveness
-!bind <key> <command>           # Bind commands to keyboard shortcuts (if supported)
+!bind <command>                 # Set user-specific bind command
 ```
 
 ## 🏗️ Architecture

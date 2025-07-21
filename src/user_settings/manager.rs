@@ -111,4 +111,12 @@ impl UserSettingsManager {
     pub async fn get_farewell(&self, username: &str) -> Result<Option<String>, Error> {
         self.get_user_setting(username, SettingType::Farewell).await
     }
+
+    pub async fn clear_greeting(&self, username: &str) -> Result<bool, Error> {
+        self.delete_user_setting(username, SettingType::Greeting).await
+    }
+
+    pub async fn clear_farewell(&self, username: &str) -> Result<bool, Error> {
+        self.delete_user_setting(username, SettingType::Farewell).await
+    }
 }

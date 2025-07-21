@@ -32,26 +32,17 @@ impl Command for FarewellCommand {
         };
 
         if args.is_empty() {
-            // Execute the user's farewell command
+            // Clear/unset the user's farewell command
             if let Some(user_settings_manager) = tools.get_user_settings_manager() {
-                match user_settings_manager.get_farewell(&username).await {
-                    Ok(Some(farewell_command)) => {
-                        // Execute the farewell command
-                        tools.reply(&format!("👋 Executing farewell: {}", farewell_command)).await?;
-                        
-                        // Execute the command - it should already have the ! prefix from storage
-                        if let Err(e) = tools.execute_command(&farewell_command, &context).await {
-                            tools.reply(&format!("❌ Error executing farewell command: {}", e)).await?;
-                        }
+                match user_settings_manager.clear_farewell(&username).await {
+                    Ok(true) => {
+                        tools.reply("✅ Your farewell command has been removed").await?;
                     }
-                    Ok(None) => {
-                        tools.reply("❌ You don't have a farewell command set. Use `!farewell <command>` to set one.\n\
-                                    **Examples:**\n\
-                                    • `!farewell sounds play ABCD` - Play a sound when you leave\n\
-                                    • `!farewell alias mygoodbye` - Execute an alias when you leave").await?;
+                    Ok(false) => {
+                        tools.reply("❌ You don't have a farewell command set to remove").await?;
                     }
                     Err(e) => {
-                        tools.reply(&format!("❌ Error retrieving farewell command: {}", e)).await?;
+                        tools.reply(&format!("❌ Error removing farewell command: {}", e)).await?;
                     }
                 }
             } else {
@@ -89,6 +80,6 @@ impl Command for FarewellCommand {
     }
     
     fn description(&self) -> &str {
-        "Set or execute personal farewell commands - !farewell <command> to set, !farewell to execute"
+        "Set or remove personal farewell commands - !farewell <command> to set, !farewell to remove"
     }
 }

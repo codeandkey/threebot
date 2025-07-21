@@ -32,26 +32,17 @@ impl Command for GreetingCommand {
         };
 
         if args.is_empty() {
-            // Execute the user's greeting command
+            // Clear/unset the user's greeting command
             if let Some(user_settings_manager) = tools.get_user_settings_manager() {
-                match user_settings_manager.get_greeting(&username).await {
-                    Ok(Some(greeting_command)) => {
-                        // Execute the greeting command
-                        tools.reply(&format!("🎉 Executing greeting: {}", greeting_command)).await?;
-                        
-                        // Execute the command - it should already have the ! prefix from storage
-                        if let Err(e) = tools.execute_command(&greeting_command, &context).await {
-                            tools.reply(&format!("❌ Error executing greeting command: {}", e)).await?;
-                        }
+                match user_settings_manager.clear_greeting(&username).await {
+                    Ok(true) => {
+                        tools.reply("✅ Your greeting command has been removed").await?;
                     }
-                    Ok(None) => {
-                        tools.reply("❌ You don't have a greeting command set. Use `!greeting <command>` to set one.\n\
-                                    **Examples:**\n\
-                                    • `!greeting sounds play ABCD` - Play a sound when you join\n\
-                                    • `!greeting alias myhello` - Execute an alias when you join").await?;
+                    Ok(false) => {
+                        tools.reply("❌ You don't have a greeting command set to remove").await?;
                     }
                     Err(e) => {
-                        tools.reply(&format!("❌ Error retrieving greeting command: {}", e)).await?;
+                        tools.reply(&format!("❌ Error removing greeting command: {}", e)).await?;
                     }
                 }
             } else {
@@ -89,6 +80,6 @@ impl Command for GreetingCommand {
     }
     
     fn description(&self) -> &str {
-        "Set or execute personal greeting commands - !greeting <command> to set, !greeting to execute"
+        "Set or remove personal greeting commands - !greeting <command> to set, !greeting to remove"
     }
 }
