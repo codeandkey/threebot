@@ -1,0 +1,42 @@
+# Big Bot Configuration File
+# This file contains all the settings for the Big Bot Mumble bot.
+# You can override most of these settings using command-line arguments.
+
+# Bot-specific settings
+bot:
+  # The username the bot will use when connecting to the server
+  username: "Big Bot"
+  # Optional password for server authentication (leave as null if not needed)
+  password: null
+  # Enable verbose logging (can be overridden with --verbose)
+  verbose: false
+
+# Mumble server connection settings  
+server:
+  # Hostname or IP address of the Mumble server
+  host: "mumble.example.com"
+  # Port number for the Mumble server (default: 64738)
+  port: 64738
+  # Connection timeout in seconds
+  timeout_seconds: 10
+
+# Bot behavior settings
+behavior:
+  # Automatically play greeting sounds when users join
+  auto_greetings: true
+  # Automatically play farewell sounds when users leave (usually disabled)
+  auto_farewells: false
+  # Allow users to send commands via private messages
+  allow_private_commands: true
+
+# File and directory paths
+paths:
+  # Directory to store bot data (sounds, database, certificates, etc.)
+  # If null, defaults to ~/.bigbot
+  data_dir: null
+  # Path to SSL certificate file (if null, uses data_dir/cert.pem)
+  cert_file: null
+  # Path to SSL private key file (if null, uses data_dir/key.pem)  
+  key_file: null
+  # Directory for trusted server certificates (if null, uses data_dir/trusted_certificates)
+  trusted_certs_dir: null
