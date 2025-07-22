@@ -3,9 +3,9 @@
 use super::{Command, SessionTools, CommandContext};
 
 #[derive(Default)]
-pub struct SoundsCommand;
+pub struct SoundCommand;
 
-impl SoundsCommand {
+impl SoundCommand {
     /// Parse a flexible timestamp format: [HH]:[MM]:<S>[.SS]
     /// Examples: "30", "1:30", "1:23:45", "1:23:45.5"
     fn parse_timestamp(input: &str) -> Result<f64, String> {
@@ -209,24 +209,37 @@ impl SoundsCommand {
 }
 
 #[async_trait::async_trait]
-impl Command for SoundsCommand {
+impl Command for SoundCommand {
     async fn execute(&mut self, tools: &dyn SessionTools, _context: CommandContext, args: Vec<String>) -> Result<(), crate::error::Error> {
         if args.is_empty() {
-            tools.reply("**🔊 Sounds Command Help:**\n\
-                • `!sounds play` - Play a random sound\n\
-                • `!sounds play <code>` - Play a specific sound by code\n\
-                • `!sounds list` - List all available sounds (ordered by newest first, with creation date and aliases)\n\
-                • `!sounds info <code>` - Show detailed information about a sound\n\
-                • `!sounds pull <URL> <start> <length>` - Extract audio from a video/audio URL\n\
-                • `!sounds scan` - Scan for orphaned sound files\n\n\
+            tools.reply("**🔊 Sound Command Help:**\n\
+                • `!sound play` - Play a random sound\n\
+                • `!sound play <code>` - Play a specific sound by code\n\
+                • `!sound play <code> [effects...]` - Play a sound with audio effects\n\
+                • `!sound list` - List all available sounds (ordered by newest first, with creation date and aliases)\n\
+                • `!sound info <code>` - Show detailed information about a sound\n\
+                • `!sound pull <URL> <start> <length>` - Extract audio from a video/audio URL\n\
+                • `!sound scan` - Scan for orphaned sound files\n\
+                • `!sound stopall` - Stop all currently playing audio streams\n\n\
+                **Audio Effects:**\n\
+                • `loud` - Increase volume (+6dB)\n\
+                • `fast` - Increase speed/tempo (1.5x)\n\
+                • `slow` - Decrease speed/tempo (0.75x)\n\
+                • `reverb` - Add reverb effect\n\
+                • `echo` - Add echo effect\n\
+                • `up` - Pitch up (+200 cents)\n\
+                • `down` - Pitch down (-200 cents)\n\
+                • `bass` - Bass boost (+25dB at 50Hz)\n\n\
                 **Pull Command Details:**\n\
                 • `<URL>` - YouTube, Twitter, or other supported video/audio URL\n\
                 • `<start>` - Start time (e.g., '30', '1:30', '1:23:45')\n\
                 • `<length>` - Duration in seconds (e.g., '5', '10.5')\n\n\
                 **Examples:**\n\
-                • `!sounds play` - Play random sound\n\
-                • `!sounds play abc123` - Play sound with code 'abc123'\n\
-                • `!sounds pull https://youtube.com/watch?v=... 1:30 5` - Extract 5 seconds starting at 1:30").await?;
+                • `!sound play` - Play random sound\n\
+                • `!sound play abc123` - Play sound with code 'abc123'\n\
+                • `!sound play abc123 loud fast` - Play sound with volume boost and faster tempo\n\
+                • `!sound play abc123 reverb echo bass` - Play sound with reverb, echo, and bass boost effects\n\
+                • `!sound pull https://youtube.com/watch?v=... 1:30 5` - Extract 5 seconds starting at 1:30").await?;
             return Ok(());
         }
 
@@ -245,7 +258,7 @@ impl Command for SoundsCommand {
                                 // Get alias manager for looking up aliases
                                 let alias_manager = tools.get_alias_manager();
                                 
-                                for sound in sounds.iter().take(50) { // Limit to first 50 to avoid message length issues
+                                for sound in sounds.iter().take(30) { // Limit to first 30 to avoid message length issues
                                     let duration = format!("{:.1}s", sound.length);
                                     let source_link = if let Some(url) = &sound.source_url {
                                         format!("<a href=\"{}\">source</a>", url)
@@ -282,7 +295,7 @@ impl Command for SoundsCommand {
                                 response.push_str("</table>");
                                 
                                 if sounds.len() > 50 {
-                                    response.push_str(&format!("\n\n*Showing first 50 of {} sounds*", sounds.len()));
+                                    response.push_str(&format!("\n\n*Showing first 30 of {} sounds*", sounds.len()));
                                 }
                                 
                                 tools.reply_html(&response).await?;
@@ -337,15 +350,38 @@ impl Command for SoundsCommand {
                 } else {
                     let code = &args[1];
                     
+                    // Parse effects from remaining arguments (if any)
+                    let effect_strings: Vec<String> = args.iter().skip(2).cloned().collect();
+                    let effects = match crate::audio::effects::parse_effects(&effect_strings) {
+                        Ok(effects) => effects,
+                        Err(e) => {
+                            tools.reply(&format!("❌ {}", e)).await?;
+                            return Ok(());
+                        }
+                    };
+                    
                     if let Some(manager) = tools.get_sounds_manager() {
                         match manager.get_sound(code).await {
                             Ok(Some(sound_file)) => {
                                 // Check if file exists
                                 if sound_file.exists() {
                                     if let Some(file_path_str) = sound_file.path_str() {
-                                        match tools.play_sound(file_path_str).await {
+                                        let result = if effects.is_empty() {
+                                            tools.play_sound(file_path_str).await
+                                        } else {
+                                            tools.play_sound_with_effects(file_path_str, &effects).await
+                                        };
+                                        
+                                        match result {
                                             Ok(()) => {
-                                                tools.reply(&format!("🔊 Playing sound '{}'", code)).await?;
+                                                if effects.is_empty() {
+                                                    tools.reply(&format!("🔊 Playing sound '{}'", code)).await?;
+                                                } else {
+                                                    let effect_names: Vec<String> = effects.iter()
+                                                        .map(|e| format!("{:?}", e).to_lowercase())
+                                                        .collect();
+                                                    tools.reply(&format!("🔊 Playing sound '{}' with effects: {}", code, effect_names.join(", "))).await?;
+                                                }
                                             }
                                             Err(e) => {
                                                 tools.reply(&format!("❌ Failed to play sound '{}': {}", code, e)).await?;
@@ -372,7 +408,7 @@ impl Command for SoundsCommand {
             }
             "info" => {
                 if args.len() < 2 {
-                    tools.reply("Usage: !sounds info <code>").await?;
+                    tools.reply("Usage: !sound info <code>").await?;
                 } else {
                     let code = &args[1];
                     if let Some(manager) = tools.get_sounds_manager() {
@@ -430,7 +466,7 @@ impl Command for SoundsCommand {
             }
             "pull" => {
                 if args.len() < 4 {
-                    tools.reply("Usage: !sounds pull <URL> <start> <length_seconds>\nStart format: seconds (e.g., '30'), MM:SS (e.g., '1:30'), or HH:MM:SS (e.g., '1:23:45'), optionally with subsecond precision").await?;
+                    tools.reply("Usage: !sound pull <URL> <start> <length_seconds>\nStart format: seconds (e.g., '30'), MM:SS (e.g., '1:30'), or HH:MM:SS (e.g., '1:23:45'), optionally with subsecond precision").await?;
                 } else {
                     let url = &args[1];
                     let start_str = &args[2];
@@ -499,8 +535,12 @@ impl Command for SoundsCommand {
                     tools.reply("❌ Sounds manager not available").await?;
                 }
             }
+            "stopall" => {
+                tools.stop_all_streams().await?;
+                tools.reply("🛑 Stopped all audio streams").await?;
+            }
             _ => {
-                tools.reply("❌ Unknown sounds command. Use `!sounds` (without arguments) to see available commands.").await?;
+                tools.reply("❌ Unknown command. Use `!sound` (without arguments) to see available commands.").await?;
             }
         }
 
@@ -508,7 +548,7 @@ impl Command for SoundsCommand {
     }
 
     fn name(&self) -> &str {
-        "sounds"
+        "sound"
     }
     
     fn description(&self) -> &str {
@@ -518,28 +558,28 @@ impl Command for SoundsCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::SoundsCommand;
+    use super::SoundCommand;
 
     #[test]
     fn test_timestamp_parsing() {
         // Test plain seconds
-        assert_eq!(SoundsCommand::parse_timestamp("30").unwrap(), 30.0);
-        assert_eq!(SoundsCommand::parse_timestamp("45.5").unwrap(), 45.5);
+        assert_eq!(SoundCommand::parse_timestamp("30").unwrap(), 30.0);
+        assert_eq!(SoundCommand::parse_timestamp("45.5").unwrap(), 45.5);
         
         // Test MM:SS format
-        assert_eq!(SoundsCommand::parse_timestamp("1:30").unwrap(), 90.0);
-        assert_eq!(SoundsCommand::parse_timestamp("2:15").unwrap(), 135.0);
-        assert_eq!(SoundsCommand::parse_timestamp("0:45.5").unwrap(), 45.5);
+        assert_eq!(SoundCommand::parse_timestamp("1:30").unwrap(), 90.0);
+        assert_eq!(SoundCommand::parse_timestamp("2:15").unwrap(), 135.0);
+        assert_eq!(SoundCommand::parse_timestamp("0:45.5").unwrap(), 45.5);
         
         // Test HH:MM:SS format
-        assert_eq!(SoundsCommand::parse_timestamp("1:23:45").unwrap(), 5025.0);
-        assert_eq!(SoundsCommand::parse_timestamp("0:1:30").unwrap(), 90.0);
-        assert_eq!(SoundsCommand::parse_timestamp("2:0:0").unwrap(), 7200.0);
-        assert_eq!(SoundsCommand::parse_timestamp("1:23:45.5").unwrap(), 5025.5);
+        assert_eq!(SoundCommand::parse_timestamp("1:23:45").unwrap(), 5025.0);
+        assert_eq!(SoundCommand::parse_timestamp("0:1:30").unwrap(), 90.0);
+        assert_eq!(SoundCommand::parse_timestamp("2:0:0").unwrap(), 7200.0);
+        assert_eq!(SoundCommand::parse_timestamp("1:23:45.5").unwrap(), 5025.5);
         
         // Test error cases
-        assert!(SoundsCommand::parse_timestamp("invalid").is_err());
-        assert!(SoundsCommand::parse_timestamp("1:2:3:4").is_err());
-        assert!(SoundsCommand::parse_timestamp("1:invalid:30").is_err());
+        assert!(SoundCommand::parse_timestamp("invalid").is_err());
+        assert!(SoundCommand::parse_timestamp("1:2:3:4").is_err());
+        assert!(SoundCommand::parse_timestamp("1:invalid:30").is_err());
     }
 }

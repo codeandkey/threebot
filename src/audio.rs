@@ -2,6 +2,7 @@ use std::{
     io::{self},
     process::Stdio,
     sync::Arc,
+    path::Path,
 };
 
 use log::trace;
@@ -16,6 +17,9 @@ use tokio::{
 use opus::Encoder;
 
 use crate::{session::OutgoingMessage, util};
+use effects::{AudioEffectsProcessor, AudioEffect};
+
+pub mod effects;
 
 const SAMPLE_RATE: usize = 48000;
 const CHANNELS: usize = 2;
@@ -49,11 +53,12 @@ pub struct AudioMixer {
     writer_sender: mpsc::Sender<OutgoingMessage>,
     encoder: Encoder,
     seq: u32,
+    volume: f32,
 }
 
 impl AudioMixer {
-    pub fn spawn(writer_sender: mpsc::Sender<OutgoingMessage>) -> AudioMixerTask {
-        let mut mixer = AudioMixer::new(writer_sender);
+    pub fn spawn(writer_sender: mpsc::Sender<OutgoingMessage>, volume: f32) -> AudioMixerTask {
+        let mut mixer = AudioMixer::new(writer_sender, volume);
         let streams = mixer.streams.clone();
 
         let task_handle = tokio::spawn(async move {
@@ -66,7 +71,7 @@ impl AudioMixer {
         }
     }
 
-    pub fn new(writer_sender: mpsc::Sender<OutgoingMessage>) -> Self {
+    pub fn new(writer_sender: mpsc::Sender<OutgoingMessage>, volume: f32) -> Self {
         let mixer = AudioMixer {
             streams: Arc::new(Mutex::new(Vec::new())),
             writer_sender,
@@ -77,6 +82,7 @@ impl AudioMixer {
             )
             .unwrap(),
             seq: 0,
+            volume,
         };
 
         mixer
@@ -126,6 +132,15 @@ impl AudioMixer {
             // If no active streams, don't bother encoding
             if active == 0 {
                 continue;
+            }
+
+            // Apply global volume multiplier to the mixed audio
+            if self.volume != 1.0 {
+                for sample in mixed.iter_mut() {
+                    let scaled_sample = (*sample as f32 * self.volume) as i32;
+                    // Clamp to i16 range to prevent overflow
+                    *sample = scaled_sample.max(i16::MIN as i32).min(i16::MAX as i32) as i16;
+                }
             }
 
             // Opus frame structure:
@@ -178,29 +193,48 @@ impl AudioMixer {
 
 impl AudioMixerControl {
     pub async fn play_sound(&self, file: &str) -> io::Result<()> {
+        self.play_sound_with_effects(file, &[]).await
+    }
+
+    pub async fn play_sound_with_effects(&self, file: &str, effects: &[AudioEffect]) -> io::Result<()> {
+        log::info!("Playing sound {} with {} effects", file, effects.len());
+        for (i, effect) in effects.iter().enumerate() {
+            log::info!("  Effect {}: {:?}", i, effect);
+        }
+        
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let finished = Arc::new(Mutex::new(false));
         let buffer_clone = buffer.clone();
         let finished_clone = finished.clone();
 
-        let mut child = Command::new("ffmpeg")
-            .args([
-                "-i",
-                file,
-                "-f",
-                "s16le",
-                "-acodec",
-                "pcm_s16le",
-                "-ar",
-                &SAMPLE_RATE.to_string(),
-                "-ac",
-                &CHANNELS.to_string(),
-                "-",
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
+        // Create the processing pipeline
+        let mut child = if !effects.is_empty() {
+            log::info!("Using effects pipeline for {} effects", effects.len());
+            // Apply effects using the streaming processor - this now outputs PCM s16le directly
+            let processor = AudioEffectsProcessor::new()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            
+            // Get the streaming process with effects applied
+            // The effects pipeline now outputs the final PCM format directly
+            processor.apply_effects_streaming(Path::new(file), effects).await
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
+        } else {
+            log::info!("Using direct ffmpeg conversion (no effects)");
+            // No effects, use original file directly
+            Command::new("ffmpeg")
+                .args([
+                    "-i", file,
+                    "-f", "s16le",
+                    "-acodec", "pcm_s16le",
+                    "-ar", &SAMPLE_RATE.to_string(),
+                    "-ac", &CHANNELS.to_string(),
+                    "-",
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()?
+        };
 
         let mut stdout = child.stdout.take().unwrap();
         tokio::spawn(async move {
@@ -225,5 +259,11 @@ impl AudioMixerControl {
         streams.push(AudioStream { buffer, finished });
 
         Ok(())
+    }
+
+    pub async fn stop_all_streams(&self) {
+        log::info!("Stopping all audio streams");
+        let mut streams = self.streams.lock().await;
+        streams.clear();
     }
 }

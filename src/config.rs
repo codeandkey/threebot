@@ -42,6 +42,8 @@ pub struct BehaviorSettings {
     pub auto_farewells: FarewellMode,
     /// Whether to respond to commands in private messages
     pub allow_private_commands: bool,
+    /// Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
+    pub volume: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +97,7 @@ impl Default for BotConfig {
                 auto_greetings: GreetingMode::All,
                 auto_farewells: FarewellMode::Custom,
                 allow_private_commands: true,
+                volume: 1.0,
             },
             paths: PathSettings {
                 data_dir: None,
@@ -169,6 +172,8 @@ behavior:
   auto_farewells: custom
   # Allow users to send commands via private messages
   allow_private_commands: true
+  # Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
+  volume: 1.0
 
 # File and directory paths
 paths:

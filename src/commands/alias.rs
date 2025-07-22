@@ -6,7 +6,7 @@ pub struct AliasCommand;
 
 #[async_trait::async_trait]
 impl Command for AliasCommand {
-    async fn execute(&mut self, tools: &dyn SessionTools, context: CommandContext, args: Vec<String>) -> Result<(), Error> {
+    async fn execute(&mut self, tools: &dyn SessionTools, context: CommandContext, mut args: Vec<String>) -> Result<(), Error> {
         if args.is_empty() {
             // List first page of aliases
             self.list_aliases_paginated(tools, 0).await
@@ -22,6 +22,7 @@ impl Command for AliasCommand {
                         • `!alias` or `!alias list` - List first page of aliases\n\
                         • `!alias list <page>` - List aliases by page (20 per page)\n\
                         • `!alias search <term> [page]` - Search aliases\n\
+                        • `!alias create <name> <commands...>` - Create an alias\n\
                         • `!alias <name> <commands...>` - Create an alias\n\
                         • `!alias remove <name>` - Remove an alias\n\
                         • `!alias help` - Show this help\n\n\
@@ -30,8 +31,8 @@ impl Command for AliasCommand {
                         • `$1`, `$2`, etc. - Individual arguments\n\
                         • `$#` - Number of arguments\n\n\
                         **Examples:**\n\
-                        • `!alias greet sounds play hello; sounds play $1`\n\
-                        • `!alias welcome greet $@; sounds play fanfare`").await
+                        • `!alias greet sound play hello; sound play $1`\n\
+                        • `!alias welcome greet $@; sound play fanfare`").await
                 }
                 _ => {
                     tools.reply("Usage: !alias [list|help] or !alias <name> <commands...> or !alias remove <name>").await
@@ -83,6 +84,13 @@ impl Command for AliasCommand {
                 }
             }
         } else {
+            // Allow the keyword 'create' to be dropped here to explicitly create an alias
+            // for when the alias name matches one of the subcommands
+
+            if &args[0] == "create" {
+                args.remove(0); // Remove 'create' keyword
+            }
+
             // Create an alias: !alias <name> <commands...>
             let alias_name = &args[0];
             let commands = args[1..].join(" ");

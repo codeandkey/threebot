@@ -48,35 +48,22 @@ pub fn markdown_to_html(input: &str) -> String {
         }
     }
     
-    // Convert • bullets to proper list items (keep • as is since Mumble displays it well)
-    // and convert `code` to <tt>code</tt> for monospace
-    let mut final_result = String::new();
-    let mut in_code = false;
-    let mut chars = result.chars().peekable();
-    
-    while let Some(ch) = chars.next() {
-        if ch == '`' {
-            if in_code {
-                final_result.push_str("</tt>");
-                in_code = false;
-            } else {
-                final_result.push_str("<tt>");
-                in_code = true;
-            }
-        } else if ch == '\n' {
-            // Convert newlines to HTML line breaks
-            final_result.push_str("<br>");
+    // Convert `code` to <tt>code</tt> for monospace with proper HTML escaping
+    while let Some(start) = result.find("`") {
+        if let Some(end) = result[start + 1..].find("`") {
+            let end_pos = start + 1 + end;
+            let code_text = &result[start + 1..end_pos];
+            let replacement = format!("<tt>{}</tt>", escape_html(code_text));
+            result.replace_range(start..end_pos + 1, &replacement);
         } else {
-            final_result.push(ch);
+            break;
         }
     }
     
-    // If we ended with an unclosed code block, close it
-    if in_code {
-        final_result.push_str("</tt>");
-    }
+    // Convert newlines to HTML line breaks
+    result = result.replace("\n", "<br>");
     
-    final_result
+    result
 }
 
 pub struct ConnectionOptions {
@@ -371,7 +358,7 @@ impl Session {
 
         info!("Sent authenticate message to server");
 
-        let audio_mixer = AudioMixer::spawn(writer_task.sender.clone());
+        let audio_mixer = AudioMixer::spawn(writer_task.sender.clone(), options.behavior_settings.volume);
 
         // Initialize database manager
         let database_manager = match crate::database::DatabaseManager::new(&database_path).await {
@@ -728,7 +715,7 @@ impl Session {
                                 warn!("Command execution failed: {}", e);
                                 // Send error message back to user
                                 let error_msg = format!("Command error: {}", e);
-                                if let Err(reply_err) = self.send_error_reply(&error_msg, is_private_message, actor_id, source_channel_id).await {
+                                if let Err(reply_err) = self.send_error_reply(&error_msg, actor_id).await {
                                     warn!("Failed to send error reply: {}", reply_err);
                                 }
                             }
@@ -757,14 +744,8 @@ impl Session {
         self.command_executor.execute(command_text, self, context).await
     }
 
-    async fn send_error_reply(&self, error_msg: &str, is_private_message: bool, actor_id: u32, source_channel_id: Option<u32>) -> Result<(), Error> {
-        if is_private_message {
-            self.send_private_message(actor_id, error_msg).await
-        } else if let Some(channel_id) = source_channel_id {
-            self.send_channel_message(channel_id, error_msg).await
-        } else {
-            self.broadcast(error_msg).await
-        }
+    async fn send_error_reply(&self, error_msg: &str, actor_id: u32) -> Result<(), Error> {
+        self.send_private_message(actor_id, error_msg).await
     }
 
     /// Attempts to set the current channel ID from our user state
@@ -965,14 +946,14 @@ impl Session {
 
     /// Plays a random greeting sound
     async fn play_random_greeting_sound(&self) -> Result<(), Error> {
-        // Execute the sounds play command without arguments to get a random sound
+        // Execute the sound play command without arguments to get a random sound
         let context = crate::commands::CommandContext {
             triggering_user_id: None, // System-triggered
             source_channel_id: self.current_channel_id,
             is_private_message: false,
         };
         
-        if let Err(e) = self.command_executor.execute("!sounds play", self, context).await {
+        if let Err(e) = self.command_executor.execute("!sound play", self, context).await {
             warn!("Failed to execute random greeting sound command: {}", e);
         }
         Ok(())
@@ -989,6 +970,16 @@ impl SessionTools for Session {
     async fn play_sound(&self, file_path: &str) -> Result<(), Error> {
         self.audio_mixer.control().play_sound(file_path).await
             .map_err(|e| Error::ConnectionError(format!("Failed to play sound: {}", e)))
+    }
+
+    async fn play_sound_with_effects(&self, file_path: &str, effects: &[crate::audio::effects::AudioEffect]) -> Result<(), Error> {
+        self.audio_mixer.control().play_sound_with_effects(file_path, effects).await
+            .map_err(|e| Error::ConnectionError(format!("Failed to play sound with effects: {}", e)))
+    }
+
+    async fn stop_all_streams(&self) -> Result<(), Error> {
+        self.audio_mixer.control().stop_all_streams().await;
+        Ok(())
     }
 
     async fn send_channel_message(&self, channel_id: u32, message: &str) -> Result<(), Error> {
@@ -1095,10 +1086,16 @@ mod tests {
             "<b>&lt;script&gt;</b> is dangerous"
         );
 
-        // Test unclosed code block
+        // Test with HTML entities that need escaping in code text
+        assert_eq!(
+            markdown_to_html("Use `<code>` tags"),
+            "Use <tt>&lt;code&gt;</tt> tags"
+        );
+
+        // Test unclosed code block (should remain unchanged if no closing backtick)
         assert_eq!(
             markdown_to_html("Start `code here"),
-            "Start <tt>code here</tt>"
+            "Start `code here"
         );
 
         // Test bullets with newlines converted to <br>

@@ -22,12 +22,16 @@ server:
 
 # Bot behavior settings
 behavior:
-  # Automatically play greeting sounds when users join
-  auto_greetings: true
-  # Automatically play farewell sounds when users leave (usually disabled)
-  auto_farewells: false
+  # Greeting sounds when users join
+  # Options: "all" (custom + random fallback), "custom" (only user-set), "none" (silent)
+  auto_greetings: all
+  # Farewell sounds when users leave  
+  # Options: "all" (custom + random fallback), "custom" (only user-set), "none" (silent)
+  auto_farewells: custom
   # Allow users to send commands via private messages
   allow_private_commands: true
+  # Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
+  volume: 1.0
 
 # File and directory paths
 paths:

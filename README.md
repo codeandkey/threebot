@@ -110,6 +110,8 @@ behavior:
   auto_greetings: all
   auto_farewells: custom
   allow_private_commands: true
+  # Global volume multiplier (1.0 = normal, 0.5 = half, 2.0 = double)
+  volume: 1.0
 
 # File and directory paths
 paths:
@@ -147,27 +149,27 @@ The new **3-mode system** provides granular control:
 
 ```bash
 # Play sounds
-!sounds play                    # Random sound
-!sounds play abc123            # Specific sound by code
-!sounds list                   # Show all available sounds
-!sounds info abc123            # Detailed sound information
+!sound play                    # Random sound
+!sound play abc123            # Specific sound by code
+!sound list                   # Show all available sounds
+!sound info abc123            # Detailed sound information
 
 # Pull audio from URLs
-!sounds pull https://youtube.com/watch?v=... 1:30 5    # 5 seconds starting at 1:30
+!sound pull https://youtube.com/watch?v=... 1:30 5    # 5 seconds starting at 1:30
 
 # File management
-!sounds scan                   # Find orphaned sound files
+!sound scan                   # Find orphaned sound files
 ```
 
 ### User Personalization
 
 ```bash
 # Set personal greetings
-!greeting sounds play welcome     # Play 'welcome' sound when you join
+!greeting sound play welcome     # Play 'welcome' sound when you join
 !greeting                         # Remove your current greeting
 
 # Set personal farewells
-!farewell sounds play goodbye     # Play 'goodbye' sound when you leave
+!farewell sound play goodbye     # Play 'goodbye' sound when you leave
 !farewell                         # Remove your current farewell
 ```
 
@@ -175,7 +177,7 @@ The new **3-mode system** provides granular control:
 
 ```bash
 # Create command shortcuts
-!alias myhello sounds play hello
+!alias myhello sound play hello
 !alias party sounds play party; sounds play music
 !alias list                      # Show all available aliases
 !alias delete myhello            # Remove an alias
@@ -374,7 +376,7 @@ cat ~/.bigbot/config.yml
 ffmpeg -version
 
 # Check sound files
-!sounds scan
+!sound scan
 ```
 
 **Configuration errors:**

@@ -21,6 +21,14 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
     async fn play_sound(&self, file_path: &str) -> Result<(), Error> {
         self.tools.play_sound(file_path).await
     }
+
+    async fn play_sound_with_effects(&self, file_path: &str, effects: &[crate::audio::effects::AudioEffect]) -> Result<(), Error> {
+        self.tools.play_sound_with_effects(file_path, effects).await
+    }
+
+    async fn stop_all_streams(&self) -> Result<(), Error> {
+        self.tools.stop_all_streams().await
+    }
     
     async fn send_channel_message(&self, channel_id: u32, message: &str) -> Result<(), Error> {
         self.tools.send_channel_message(channel_id, message).await
@@ -93,6 +101,12 @@ pub trait SessionTools: Send + Sync {
     /// Play an audio file through the audio mixer
     async fn play_sound(&self, file_path: &str) -> Result<(), Error>;
     
+    /// Play an audio file with effects through the audio mixer
+    async fn play_sound_with_effects(&self, file_path: &str, effects: &[crate::audio::effects::AudioEffect]) -> Result<(), Error>;
+    
+    /// Stop all currently playing audio streams
+    async fn stop_all_streams(&self) -> Result<(), Error>;
+    
     /// Send a text message to a specific channel
     async fn send_channel_message(&self, channel_id: u32, message: &str) -> Result<(), Error>;
     
@@ -153,7 +167,7 @@ pub trait Command: Send + Sync {
 }
 
 pub mod ping;
-pub mod sounds;
+pub mod sound;
 pub mod alias;
 pub mod bind;
 pub mod greeting;
@@ -281,15 +295,18 @@ impl Executor {
     async fn execute_alias_commands(&self, alias_commands: &str, tools: &dyn SessionTools, context: CommandContext, original_args: &[String], current_depth: u32) -> Result<(), Error> {
         // Implement sophisticated parameter substitution
         let mut expanded_commands = alias_commands.to_string();
+        let mut performed_substitution = false;
         
         // Replace $@ with all original arguments
         if expanded_commands.contains("$@") {
             expanded_commands = expanded_commands.replace("$@", &original_args.join(" "));
+            performed_substitution = true;
         }
         
         // Replace $# with argument count
         if expanded_commands.contains("$#") {
             expanded_commands = expanded_commands.replace("$#", &original_args.len().to_string());
+            performed_substitution = true;
         }
         
         // Replace $1, $2, $3, etc. with individual arguments
@@ -297,6 +314,16 @@ impl Executor {
             let placeholder = format!("${}", i + 1);
             if expanded_commands.contains(&placeholder) {
                 expanded_commands = expanded_commands.replace(&placeholder, arg);
+                performed_substitution = true;
+            }
+        }
+
+        // If no substitutions were performed, append all positional arguments to the last command
+        if !performed_substitution {
+            if let Some(last_semicolon) = expanded_commands.rfind(';') {
+                expanded_commands.insert_str(last_semicolon + 1, &original_args.join(" "));
+            } else {
+                expanded_commands.push_str(&format!(" {}", original_args.join(" ")));
             }
         }
 

@@ -47,7 +47,7 @@ impl Command for BindCommand {
                     Ok(None) => {
                         tools.reply("❌ You don't have a bind command set. Use `!bind <command>` to set one.\n\
                                     **Example:**\n\
-                                    • `!bind sounds play ABCD` - Bind a sound").await?;
+                                    • `!bind sound play ABCD` - Bind a sound").await?;
                     }
                     Err(e) => {
                         tools.reply(&format!("❌ Error retrieving bind command: {}", e)).await?;
@@ -100,8 +100,8 @@ mod tests {
         // Test cases for the command normalization logic
         let test_cases = vec![
             // Input, Expected output
-            ("sounds play ABCD", "!sounds play ABCD"),
-            ("!sounds play ABCD", "!sounds play ABCD"), 
+            ("sound play ABCD", "!sound play ABCD"),
+            ("!sound play ABCD", "!sound play ABCD"), 
             ("ping", "!ping"),
             ("!ping", "!ping"),
             ("alias myalias", "!alias myalias"),
@@ -125,8 +125,8 @@ mod tests {
     fn test_display_formatting() {
         // Test the display format logic
         let test_cases = vec![
-            ("sounds play ABCD", "sounds play ABCD"),
-            ("!sounds play ABCD", "sounds play ABCD"),
+            ("sound play ABCD", "sound play ABCD"),
+            ("!sound play ABCD", "sound play ABCD"),
             ("ping", "ping"),
             ("!ping", "ping"),
         ];
