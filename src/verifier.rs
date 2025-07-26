@@ -32,7 +32,10 @@ impl PromptingCertVerifier {
 
         // Ensure the trusted certificates directory exists
         if let Err(e) = fs::create_dir_all(&trusted_certs_dir) {
-            eprintln!("Warning: Failed to create trusted certificates directory: {}", e);
+            eprintln!(
+                "Warning: Failed to create trusted certificates directory: {}",
+                e
+            );
         }
 
         let mut verifier = Self {
@@ -63,10 +66,14 @@ impl PromptingCertVerifier {
         }
     }
 
-    fn save_certificate(&self, cert: &CertificateDer, fingerprint: &str) -> Result<(), Box<dyn std::error::Error>> {
+    fn save_certificate(
+        &self,
+        cert: &CertificateDer,
+        fingerprint: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let filename = format!("{}.der", fingerprint.replace(":", ""));
         let cert_path = self.trusted_certs_dir.join(filename);
-        
+
         fs::write(&cert_path, cert.as_ref())?;
         println!("Saved trusted certificate to: {:?}", cert_path);
         Ok(())

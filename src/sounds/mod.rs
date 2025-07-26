@@ -48,11 +48,11 @@ mod tests {
         assert!(validate_sound_code("ABCD"));
         assert!(validate_sound_code("abcd"));
         assert!(validate_sound_code("AbCd"));
-        
-        assert!(!validate_sound_code("ABC"));   // too short
+
+        assert!(!validate_sound_code("ABC")); // too short
         assert!(!validate_sound_code("ABCDE")); // too long
-        assert!(!validate_sound_code("AB12"));  // contains numbers
-        assert!(!validate_sound_code("AB-D"));  // contains special chars
-        assert!(!validate_sound_code(""));      // empty
+        assert!(!validate_sound_code("AB12")); // contains numbers
+        assert!(!validate_sound_code("AB-D")); // contains special chars
+        assert!(!validate_sound_code("")); // empty
     }
 }

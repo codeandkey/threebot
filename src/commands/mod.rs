@@ -22,36 +22,44 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
         self.tools.play_sound(file_path).await
     }
 
-    async fn play_sound_with_effects(&self, file_path: &str, effects: &[crate::audio::effects::AudioEffect]) -> Result<(), Error> {
+    async fn play_sound_with_effects(
+        &self,
+        file_path: &str,
+        effects: &[crate::audio::effects::AudioEffect],
+    ) -> Result<(), Error> {
         self.tools.play_sound_with_effects(file_path, effects).await
     }
 
     async fn stop_all_streams(&self) -> Result<(), Error> {
         self.tools.stop_all_streams().await
     }
-    
+
     async fn send_channel_message(&self, channel_id: u32, message: &str) -> Result<(), Error> {
         self.tools.send_channel_message(channel_id, message).await
     }
-    
+
     async fn broadcast(&self, message: &str) -> Result<(), Error> {
         self.tools.broadcast(message).await
     }
-    
+
     async fn send_private_message(&self, user_id: u32, message: &str) -> Result<(), Error> {
         self.tools.send_private_message(user_id, message).await
     }
-    
+
     async fn reply(&self, message: &str) -> Result<(), Error> {
         // Always send as private message to the triggering user
         if let Some(user_id) = self.context.triggering_user_id {
-            self.tools.send_private_message(user_id, &crate::session::markdown_to_html(message)).await
+            self.tools
+                .send_private_message(user_id, &crate::session::markdown_to_html(message))
+                .await
         } else {
             // Fallback to broadcast if no user ID
-            self.tools.broadcast(&crate::session::markdown_to_html(message)).await
+            self.tools
+                .broadcast(&crate::session::markdown_to_html(message))
+                .await
         }
     }
-    
+
     async fn reply_html(&self, html: &str) -> Result<(), Error> {
         // Always send as private message to the triggering user
         if let Some(user_id) = self.context.triggering_user_id {
@@ -61,47 +69,50 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
             self.tools.broadcast(html).await
         }
     }
-    
+
     fn current_user_id(&self) -> Option<u32> {
         self.tools.current_user_id()
     }
-    
+
     fn current_channel_id(&self) -> Option<u32> {
         self.tools.current_channel_id()
     }
-    
+
     fn get_user_info(&self, user_id: u32) -> Option<&crate::protos::generated::Mumble::UserState> {
         self.tools.get_user_info(user_id)
     }
-    
-    fn get_channel_info(&self, channel_id: u32) -> Option<&crate::protos::generated::Mumble::ChannelState> {
+
+    fn get_channel_info(
+        &self,
+        channel_id: u32,
+    ) -> Option<&crate::protos::generated::Mumble::ChannelState> {
         self.tools.get_channel_info(channel_id)
     }
-    
+
     fn get_sounds_manager(&self) -> Option<Arc<crate::sounds::SoundsManager>> {
         self.tools.get_sounds_manager()
     }
-    
+
     fn get_alias_manager(&self) -> Option<Arc<crate::alias::AliasManager>> {
         self.tools.get_alias_manager()
     }
-    
+
     fn get_user_settings_manager(&self) -> Option<Arc<crate::user_settings::UserSettingsManager>> {
         self.tools.get_user_settings_manager()
     }
-    
+
     async fn execute_command(&self, command: &str, context: &CommandContext) -> Result<(), Error> {
         self.tools.execute_command(command, context).await
     }
-    
+
     fn behavior_settings(&self) -> &crate::config::BehaviorSettings {
         self.tools.behavior_settings()
     }
-    
+
     fn audio_effect_settings(&self) -> &crate::config::AudioEffectSettings {
         self.tools.audio_effect_settings()
     }
-    
+
     fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {
         self.tools.create_html_table(headers, rows)
     }
@@ -112,62 +123,70 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
 pub trait SessionTools: Send + Sync {
     /// Play an audio file through the audio mixer
     async fn play_sound(&self, file_path: &str) -> Result<(), Error>;
-    
+
     /// Play an audio file with effects through the audio mixer
-    async fn play_sound_with_effects(&self, file_path: &str, effects: &[crate::audio::effects::AudioEffect]) -> Result<(), Error>;
-    
+    async fn play_sound_with_effects(
+        &self,
+        file_path: &str,
+        effects: &[crate::audio::effects::AudioEffect],
+    ) -> Result<(), Error>;
+
     /// Stop all currently playing audio streams
     async fn stop_all_streams(&self) -> Result<(), Error>;
-    
+
     /// Send a text message to a specific channel
     async fn send_channel_message(&self, channel_id: u32, message: &str) -> Result<(), Error>;
-    
+
     /// Send a text message to the current channel
     async fn broadcast(&self, message: &str) -> Result<(), Error>;
-    
+
     /// Send a private message to a specific user
     async fn send_private_message(&self, user_id: u32, message: &str) -> Result<(), Error>;
-    
+
     /// Reply to the user who triggered the command (context-aware)
     async fn reply(&self, message: &str) -> Result<(), Error>;
-    
+
     /// Reply with raw HTML (bypasses markdown conversion)
     async fn reply_html(&self, html: &str) -> Result<(), Error>;
-    
+
     /// Get the current user's session ID
     fn current_user_id(&self) -> Option<u32>;
-    
+
     /// Get the current channel ID
     fn current_channel_id(&self) -> Option<u32>;
-    
+
     /// Get information about a user by ID
     fn get_user_info(&self, user_id: u32) -> Option<&crate::protos::generated::Mumble::UserState>;
-    
+
     /// Get information about a channel by ID
-    fn get_channel_info(&self, channel_id: u32) -> Option<&crate::protos::generated::Mumble::ChannelState>;
-    
+    fn get_channel_info(
+        &self,
+        channel_id: u32,
+    ) -> Option<&crate::protos::generated::Mumble::ChannelState>;
+
     /// Get access to the sounds manager for sound-related operations
     fn get_sounds_manager(&self) -> Option<Arc<crate::sounds::SoundsManager>>;
-    
+
     /// Get access to the alias manager for alias-related operations
     fn get_alias_manager(&self) -> Option<Arc<crate::alias::AliasManager>>;
-    
+
     /// Get access to the user settings manager for user-specific settings
     fn get_user_settings_manager(&self) -> Option<Arc<crate::user_settings::UserSettingsManager>>;
-    
+
     /// Execute a command string
     async fn execute_command(&self, command: &str, context: &CommandContext) -> Result<(), Error>;
-    
+
     /// Get the current behavior settings
     fn behavior_settings(&self) -> &crate::config::BehaviorSettings;
-    
+
     /// Get the current audio effect settings
     fn audio_effect_settings(&self) -> &crate::config::AudioEffectSettings;
-    
+
     /// Creates an HTML table with no borders, bold centered headers, and standard text rows
     fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {
-        let mut table = String::from("<table style=\"border-collapse: collapse; width: 100%; border: none;\">");
-        
+        let mut table =
+            String::from("<table style=\"border-collapse: collapse; width: 100%; border: none;\">");
+
         // Add header row
         table.push_str("<tr>");
         for header in headers {
@@ -177,7 +196,7 @@ pub trait SessionTools: Send + Sync {
             ));
         }
         table.push_str("</tr>");
-        
+
         // Add data rows
         for row in rows {
             table.push_str("<tr>");
@@ -189,7 +208,7 @@ pub trait SessionTools: Send + Sync {
             }
             table.push_str("</tr>");
         }
-        
+
         table.push_str("</table>");
         table
     }
@@ -208,16 +227,23 @@ pub struct CommandContext {
 
 #[async_trait::async_trait]
 pub trait Command: Send + Sync {
-    async fn execute(&mut self, tools: &dyn SessionTools, context: CommandContext, args: Vec<String>) -> Result<(), Error>;
-    fn description(&self) -> &str { "No description available" }
+    async fn execute(
+        &mut self,
+        tools: &dyn SessionTools,
+        context: CommandContext,
+        args: Vec<String>,
+    ) -> Result<(), Error>;
+    fn description(&self) -> &str {
+        "No description available"
+    }
 }
 
-pub mod ping;
-pub mod sound;
 pub mod alias;
 pub mod bind;
-pub mod greeting;
 pub mod farewell;
+pub mod greeting;
+pub mod ping;
+pub mod sound;
 
 // Include the generated command mappings
 include!(concat!(env!("OUT_DIR"), "/commands_generated.rs"));
@@ -231,24 +257,52 @@ const MAX_ALIAS_DEPTH: u32 = 10; // Maximum alias expansion depth
 impl Executor {
     pub fn new() -> Self {
         let mut commands = HashMap::new();
-        
+
         // Manually register commands with their inferred names from filenames
-        commands.insert("alias".to_string(), Arc::new(Mutex::new(Box::new(alias::AliasCommand::default()) as Box<dyn Command>)));
-        commands.insert("bind".to_string(), Arc::new(Mutex::new(Box::new(bind::BindCommand::default()) as Box<dyn Command>)));
-        commands.insert("farewell".to_string(), Arc::new(Mutex::new(Box::new(farewell::FarewellCommand::default()) as Box<dyn Command>)));
-        commands.insert("greeting".to_string(), Arc::new(Mutex::new(Box::new(greeting::GreetingCommand::default()) as Box<dyn Command>)));
-        commands.insert("ping".to_string(), Arc::new(Mutex::new(Box::new(ping::PingCommand::default()) as Box<dyn Command>)));
-        commands.insert("sound".to_string(), Arc::new(Mutex::new(Box::new(sound::SoundCommand::default()) as Box<dyn Command>)));
-        
-        Executor { 
-            commands,
-        }
+        commands.insert(
+            "alias".to_string(),
+            Arc::new(Mutex::new(
+                Box::new(alias::AliasCommand::default()) as Box<dyn Command>
+            )),
+        );
+        commands.insert(
+            "bind".to_string(),
+            Arc::new(Mutex::new(
+                Box::new(bind::BindCommand::default()) as Box<dyn Command>
+            )),
+        );
+        commands.insert(
+            "farewell".to_string(),
+            Arc::new(Mutex::new(
+                Box::new(farewell::FarewellCommand::default()) as Box<dyn Command>
+            )),
+        );
+        commands.insert(
+            "greeting".to_string(),
+            Arc::new(Mutex::new(
+                Box::new(greeting::GreetingCommand::default()) as Box<dyn Command>
+            )),
+        );
+        commands.insert(
+            "ping".to_string(),
+            Arc::new(Mutex::new(
+                Box::new(ping::PingCommand::default()) as Box<dyn Command>
+            )),
+        );
+        commands.insert(
+            "sound".to_string(),
+            Arc::new(Mutex::new(
+                Box::new(sound::SoundCommand::default()) as Box<dyn Command>
+            )),
+        );
+
+        Executor { commands }
     }
 
     /// Sanitize command line by removing HTML link tags
     fn sanitize_command_line(cmdline: &str) -> String {
         let mut result = cmdline.to_string();
-        
+
         // Remove <a href="...">...</a> tags, keeping only the inner text
         loop {
             if let Some(start_tag_pos) = result.find("<a ") {
@@ -271,7 +325,7 @@ impl Executor {
                 break;
             }
         }
-        
+
         // Remove any other HTML tags as a fallback
         loop {
             if let Some(start) = result.find('<') {
@@ -285,28 +339,43 @@ impl Executor {
                 break;
             }
         }
-        
+
         result
     }
 
-    pub async fn execute(&self, cmdline: &str, tools: &dyn SessionTools, context: CommandContext) -> Result<(), Error> {
+    pub async fn execute(
+        &self,
+        cmdline: &str,
+        tools: &dyn SessionTools,
+        context: CommandContext,
+    ) -> Result<(), Error> {
         // Start with depth 0 for the public entry point
         self.execute_with_depth(cmdline, tools, context, 0).await
     }
 
     /// Internal method that tracks alias expansion depth
-    async fn execute_with_depth(&self, cmdline: &str, tools: &dyn SessionTools, context: CommandContext, current_depth: u32) -> Result<(), Error> {
+    async fn execute_with_depth(
+        &self,
+        cmdline: &str,
+        tools: &dyn SessionTools,
+        context: CommandContext,
+        current_depth: u32,
+    ) -> Result<(), Error> {
         // Sanitize the command line to remove HTML tags
         let sanitized_cmdline = Self::sanitize_command_line(cmdline);
-        
+
         let mut parts = sanitized_cmdline.split_whitespace();
-        let mut command_name = parts.next().ok_or_else(|| Error::InvalidArgument("No command provided".to_string()))?;
+        let mut command_name = parts
+            .next()
+            .ok_or_else(|| Error::InvalidArgument("No command provided".to_string()))?;
 
         if command_name.starts_with("!") {
             // Remove the leading '!' if present
             command_name = &command_name[1..];
         } else {
-            return Err(Error::InvalidArgument("Command must start with '!'".to_string()));
+            return Err(Error::InvalidArgument(
+                "Command must start with '!'".to_string(),
+            ));
         }
 
         let args: Vec<String> = parts.map(String::from).collect();
@@ -315,7 +384,9 @@ impl Executor {
         if let Some(command) = self.commands.get(command_name) {
             let mut cmd = command.lock().await;
             let context_aware_tools = ContextAwareSessionTools::new(tools, &context);
-            return cmd.execute(&context_aware_tools, context.clone(), args).await;
+            return cmd
+                .execute(&context_aware_tools, context.clone(), args)
+                .await;
         }
 
         // If not a built-in command, check if it's an alias
@@ -324,39 +395,57 @@ impl Executor {
                 // Check for maximum expansion depth
                 if current_depth >= MAX_ALIAS_DEPTH {
                     return Err(Error::InvalidArgument(format!(
-                        "Maximum alias expansion depth ({}) exceeded. Possible recursive alias: {}", 
+                        "Maximum alias expansion depth ({}) exceeded. Possible recursive alias: {}",
                         MAX_ALIAS_DEPTH, command_name
                     )));
                 }
-                
+
                 // Execute the alias commands with incremented depth
                 let context_aware_tools = ContextAwareSessionTools::new(tools, &context);
-                return self.execute_alias_commands(&alias.commands, &context_aware_tools, context.clone(), &args, current_depth + 1).await;
+                return self
+                    .execute_alias_commands(
+                        &alias.commands,
+                        &context_aware_tools,
+                        context.clone(),
+                        &args,
+                        current_depth + 1,
+                    )
+                    .await;
             }
         }
 
         // Neither built-in command nor alias found
-        Err(Error::InvalidArgument(format!("Unknown command: {}", command_name)))
+        Err(Error::InvalidArgument(format!(
+            "Unknown command: {}",
+            command_name
+        )))
     }
 
     /// Executes alias commands, handling variable substitution
-    async fn execute_alias_commands(&self, alias_commands: &str, tools: &dyn SessionTools, context: CommandContext, original_args: &[String], current_depth: u32) -> Result<(), Error> {
+    async fn execute_alias_commands(
+        &self,
+        alias_commands: &str,
+        tools: &dyn SessionTools,
+        context: CommandContext,
+        original_args: &[String],
+        current_depth: u32,
+    ) -> Result<(), Error> {
         // Implement sophisticated parameter substitution
         let mut expanded_commands = alias_commands.to_string();
         let mut performed_substitution = false;
-        
+
         // Replace $@ with all original arguments
         if expanded_commands.contains("$@") {
             expanded_commands = expanded_commands.replace("$@", &original_args.join(" "));
             performed_substitution = true;
         }
-        
+
         // Replace $# with argument count
         if expanded_commands.contains("$#") {
             expanded_commands = expanded_commands.replace("$#", &original_args.len().to_string());
             performed_substitution = true;
         }
-        
+
         // Replace $1, $2, $3, etc. with individual arguments
         for (i, arg) in original_args.iter().enumerate() {
             let placeholder = format!("${}", i + 1);
@@ -385,13 +474,19 @@ impl Executor {
                 } else {
                     format!("!{}", command_line)
                 };
-                
+
                 // Recursively execute the command with current depth (this will handle nested aliases)
                 // Use Box::pin to handle recursion
-                Box::pin(self.execute_with_depth(&full_command, tools, context.clone(), current_depth)).await?;
+                Box::pin(self.execute_with_depth(
+                    &full_command,
+                    tools,
+                    context.clone(),
+                    current_depth,
+                ))
+                .await?;
             }
         }
-        
+
         Ok(())
     }
 

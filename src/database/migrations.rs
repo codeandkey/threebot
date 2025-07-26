@@ -11,15 +11,15 @@ pub async fn run_all_migrations(db: &DatabaseConnection) -> Result<(), Error> {
 
 /// Migrates the sounds table
 async fn migrate_sounds_table(db: &DatabaseConnection) -> Result<(), Error> {
-    use sea_orm::Schema;
     use super::entities::sounds;
+    use sea_orm::Schema;
 
     let builder = db.get_database_backend();
     let schema = Schema::new(builder);
 
     // Create the sounds table if it doesn't exist
     let stmt = schema.create_table_from_entity(sounds::Entity);
-    
+
     match db.execute(builder.build(&stmt)).await {
         Ok(_) => {
             info!("Sounds table migration completed successfully");
@@ -31,7 +31,10 @@ async fn migrate_sounds_table(db: &DatabaseConnection) -> Result<(), Error> {
                 info!("Sounds table already exists");
                 Ok(())
             } else {
-                Err(Error::DatabaseError(format!("Failed to create sounds table: {}", e)))
+                Err(Error::DatabaseError(format!(
+                    "Failed to create sounds table: {}",
+                    e
+                )))
             }
         }
     }
@@ -39,15 +42,15 @@ async fn migrate_sounds_table(db: &DatabaseConnection) -> Result<(), Error> {
 
 /// Migrates the aliases table
 async fn migrate_aliases_table(db: &DatabaseConnection) -> Result<(), Error> {
-    use sea_orm::Schema;
     use super::entities::aliases;
+    use sea_orm::Schema;
 
     let builder = db.get_database_backend();
     let schema = Schema::new(builder);
 
     // Create the aliases table if it doesn't exist
     let stmt = schema.create_table_from_entity(aliases::Entity);
-    
+
     match db.execute(builder.build(&stmt)).await {
         Ok(_) => {
             info!("Aliases table migration completed successfully");
@@ -59,7 +62,10 @@ async fn migrate_aliases_table(db: &DatabaseConnection) -> Result<(), Error> {
                 info!("Aliases table already exists");
                 Ok(())
             } else {
-                Err(Error::DatabaseError(format!("Failed to create aliases table: {}", e)))
+                Err(Error::DatabaseError(format!(
+                    "Failed to create aliases table: {}",
+                    e
+                )))
             }
         }
     }

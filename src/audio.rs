@@ -1,8 +1,8 @@
 use std::{
     io::{self},
+    path::Path,
     process::Stdio,
     sync::Arc,
-    path::Path,
 };
 
 use log::trace;
@@ -16,8 +16,8 @@ use tokio::{
 
 use opus::Encoder;
 
-use crate::{session::OutgoingMessage, util, config::BehaviorSettings};
-use effects::{AudioEffectsProcessor, AudioEffect};
+use crate::{config::BehaviorSettings, session::OutgoingMessage, util};
+use effects::{AudioEffect, AudioEffectsProcessor};
 
 pub mod effects;
 pub mod normalizer;
@@ -61,7 +61,10 @@ pub struct AudioMixer {
 }
 
 impl AudioMixer {
-    pub fn spawn(writer_sender: mpsc::Sender<OutgoingMessage>, behavior_settings: &BehaviorSettings) -> AudioMixerTask {
+    pub fn spawn(
+        writer_sender: mpsc::Sender<OutgoingMessage>,
+        behavior_settings: &BehaviorSettings,
+    ) -> AudioMixerTask {
         let mut mixer = AudioMixer::new(writer_sender, behavior_settings);
         let streams = mixer.streams.clone();
 
@@ -75,7 +78,10 @@ impl AudioMixer {
         }
     }
 
-    pub fn new(writer_sender: mpsc::Sender<OutgoingMessage>, behavior_settings: &BehaviorSettings) -> Self {
+    pub fn new(
+        writer_sender: mpsc::Sender<OutgoingMessage>,
+        behavior_settings: &BehaviorSettings,
+    ) -> Self {
         let normalizer = if behavior_settings.volume_normalization_enabled {
             Some(VolumeNormalizer::new(
                 behavior_settings.target_loudness_lufs,
@@ -178,7 +184,7 @@ impl AudioMixer {
             match self.encoder.encode(&mixed[..], &mut opus_buf[..]) {
                 Ok(len) => {
                     opus_buf.truncate(len);
-                },
+                }
                 Err(e) => {
                     eprintln!("Failed to encode audio: {}", e);
                     continue;
@@ -189,13 +195,14 @@ impl AudioMixer {
             let mut opus_header = util::encode_varint_long(opus_header_value);
 
             opus_header[0] |= 0x20; // Force termination bit
-            
+
             let final_frame = [
                 &[header_byte],
                 seq.as_slice(),
                 opus_header.as_slice(),
                 opus_buf.as_slice(),
-            ].concat();
+            ]
+            .concat();
 
             if let Err(e) = self
                 .writer_sender
@@ -216,12 +223,16 @@ impl AudioMixerControl {
         self.play_sound_with_effects(file, &[]).await
     }
 
-    pub async fn play_sound_with_effects(&self, file: &str, effects: &[AudioEffect]) -> io::Result<()> {
+    pub async fn play_sound_with_effects(
+        &self,
+        file: &str,
+        effects: &[AudioEffect],
+    ) -> io::Result<()> {
         log::info!("Playing sound {} with {} effects", file, effects.len());
         for (i, effect) in effects.iter().enumerate() {
             log::info!("  Effect {}: {:?}", i, effect);
         }
-        
+
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let finished = Arc::new(Mutex::new(false));
         let buffer_clone = buffer.clone();
@@ -233,21 +244,28 @@ impl AudioMixerControl {
             // Apply effects using the streaming processor - this now outputs PCM s16le directly
             let processor = AudioEffectsProcessor::new()
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-            
+
             // Get the streaming process with effects applied
             // The effects pipeline now outputs the final PCM format directly
-            processor.apply_effects_streaming(Path::new(file), effects).await
+            processor
+                .apply_effects_streaming(Path::new(file), effects)
+                .await
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
         } else {
             log::info!("Using direct ffmpeg conversion (no effects)");
             // No effects, use original file directly
             Command::new("ffmpeg")
                 .args([
-                    "-i", file,
-                    "-f", "s16le",
-                    "-acodec", "pcm_s16le",
-                    "-ar", &SAMPLE_RATE.to_string(),
-                    "-ac", &CHANNELS.to_string(),
+                    "-i",
+                    file,
+                    "-f",
+                    "s16le",
+                    "-acodec",
+                    "pcm_s16le",
+                    "-ar",
+                    &SAMPLE_RATE.to_string(),
+                    "-ac",
+                    &CHANNELS.to_string(),
                     "-",
                 ])
                 .stdin(Stdio::null())

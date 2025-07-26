@@ -1,8 +1,8 @@
-use sea_orm::*;
-use std::path::{Path, PathBuf};
+use crate::database::entities::sounds as sound_entity;
 use crate::error::Error;
 use crate::sounds::{SoundFile, validate_sound_code};
-use crate::database::entities::sounds as sound_entity;
+use sea_orm::*;
+use std::path::{Path, PathBuf};
 
 /// High-level manager for sound operations
 pub struct SoundsManager {
@@ -14,8 +14,9 @@ impl SoundsManager {
     /// Creates a new SoundsManager from a database connection
     pub fn new(database: DatabaseConnection, sounds_dir: PathBuf) -> Result<Self, Error> {
         // Ensure sounds directory exists
-        std::fs::create_dir_all(&sounds_dir)
-            .map_err(|e| Error::DatabaseError(format!("Failed to create sounds directory: {}", e)))?;
+        std::fs::create_dir_all(&sounds_dir).map_err(|e| {
+            Error::DatabaseError(format!("Failed to create sounds directory: {}", e))
+        })?;
 
         Ok(SoundsManager {
             database,
@@ -27,14 +28,20 @@ impl SoundsManager {
     fn format_timestamp(seconds: f64) -> String {
         let total_seconds = seconds as u64;
         let fractional = seconds - total_seconds as f64;
-        
+
         let hours = total_seconds / 3600;
         let minutes = (total_seconds % 3600) / 60;
         let secs = total_seconds % 60;
-        
+
         if hours > 0 {
             if fractional > 0.0 {
-                format!("{}:{:02}:{:02}.{}", hours, minutes, secs, (fractional * 10.0) as u32)
+                format!(
+                    "{}:{:02}:{:02}.{}",
+                    hours,
+                    minutes,
+                    secs,
+                    (fractional * 10.0) as u32
+                )
             } else {
                 format!("{}:{:02}:{:02}", hours, minutes, secs)
             }
@@ -52,7 +59,7 @@ impl SoundsManager {
         }
 
         let code_upper = code.to_uppercase();
-        
+
         // Get metadata from database
         let metadata = sound_entity::Entity::find_by_id(&code_upper)
             .one(&self.database)
@@ -88,7 +95,10 @@ impl SoundsManager {
         // Check if sound file exists
         let sound_file = SoundFile::new(code_upper.clone(), &self.sounds_dir);
         if !sound_file.exists() {
-            return Err(Error::InvalidInput(format!("Sound file does not exist: {}", sound_file.file_path.display())));
+            return Err(Error::InvalidInput(format!(
+                "Sound file does not exist: {}",
+                sound_file.file_path.display()
+            )));
         }
 
         // Convert start_time from seconds to timestamp format
@@ -199,7 +209,7 @@ impl SoundsManager {
     /// Gets a random sound from the database
     pub async fn get_random_sound(&self) -> Result<Option<SoundFile>, Error> {
         use rand::Rng;
-        
+
         // Get count of all sounds
         let count = sound_entity::Entity::find()
             .count(&self.database)
@@ -234,7 +244,10 @@ impl SoundsManager {
     }
 
     /// Lists sounds by author
-    pub async fn list_sounds_by_author(&self, author: &str) -> Result<Vec<sound_entity::Model>, Error> {
+    pub async fn list_sounds_by_author(
+        &self,
+        author: &str,
+    ) -> Result<Vec<sound_entity::Model>, Error> {
         let sounds = sound_entity::Entity::find()
             .filter(sound_entity::Column::Author.eq(author))
             .order_by_asc(sound_entity::Column::Code)
@@ -246,7 +259,10 @@ impl SoundsManager {
     }
 
     /// Searches for sounds that have the given string in their source URL
-    pub async fn search_sounds_by_source(&self, search_term: &str) -> Result<Vec<sound_entity::Model>, Error> {
+    pub async fn search_sounds_by_source(
+        &self,
+        search_term: &str,
+    ) -> Result<Vec<sound_entity::Model>, Error> {
         let sounds = sound_entity::Entity::find()
             .filter(sound_entity::Column::SourceUrl.contains(search_term))
             .order_by_asc(sound_entity::Column::Code)
@@ -271,11 +287,12 @@ impl SoundsManager {
             .map_err(|e| Error::DatabaseError(format!("Failed to read sounds directory: {}", e)))?;
 
         for entry in entries {
-            let entry = entry
-                .map_err(|e| Error::DatabaseError(format!("Failed to read directory entry: {}", e)))?;
-            
+            let entry = entry.map_err(|e| {
+                Error::DatabaseError(format!("Failed to read directory entry: {}", e))
+            })?;
+
             let path = entry.path();
-            
+
             // Skip if not a file
             if !path.is_file() {
                 continue;
@@ -294,7 +311,7 @@ impl SoundsManager {
             if let Some(file_stem) = path.file_stem() {
                 if let Some(code_str) = file_stem.to_str() {
                     let code = code_str.to_uppercase();
-                    
+
                     // Validate the code format
                     if !validate_sound_code(&code) {
                         continue;

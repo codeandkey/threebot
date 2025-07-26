@@ -1,7 +1,7 @@
 pub mod connection;
-pub mod migrations;
 pub mod entities;
+pub mod migrations;
 
 pub use connection::*;
-pub use migrations::*;
 pub use entities::*;
+pub use migrations::*;

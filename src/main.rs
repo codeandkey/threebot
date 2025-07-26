@@ -1,15 +1,15 @@
+mod alias;
 mod audio;
+mod commands;
 mod config;
+mod database;
 mod error;
 mod protos;
 mod session;
-mod verifier;
-mod util;
-mod commands;
 mod sounds;
-mod alias;
 mod user_settings;
-mod database;
+mod util;
+mod verifier;
 
 #[macro_use]
 extern crate log;
@@ -26,8 +26,12 @@ struct Cli {
 
     #[arg(short, long, help = "Data directory path (overrides config)")]
     data_dir: Option<String>,
-    
-    #[arg(short, long, help = "Configuration file path (default: ~/.bigbot/config.yml)")]
+
+    #[arg(
+        short,
+        long,
+        help = "Configuration file path (default: ~/.bigbot/config.yml)"
+    )]
     config: Option<String>,
 }
 
@@ -37,17 +41,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
     // Load configuration (will auto-create from example if needed)
-    let config_path = cli.config
+    let config_path = cli
+        .config
         .map(|p| std::path::PathBuf::from(p))
         .unwrap_or_else(|| BotConfig::get_config_path());
-    
+
     let mut config = BotConfig::load_or_create(&config_path)?;
-    
+
     // Apply CLI overrides
-    config.apply_cli_overrides(
-        if cli.verbose { Some(true) } else { None },
-        cli.data_dir
-    );
+    config.apply_cli_overrides(if cli.verbose { Some(true) } else { None }, cli.data_dir);
 
     // Set up logging based on configuration
     if config.bot.verbose {
@@ -67,8 +69,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Ensure the data directory exists
     if !data_dir.exists() {
-        std::fs::create_dir_all(&data_dir)
-            .map_err(|e| format!("Failed to create data directory {}: {}", data_dir.display(), e))?;
+        std::fs::create_dir_all(&data_dir).map_err(|e| {
+            format!(
+                "Failed to create data directory {}: {}",
+                data_dir.display(),
+                e
+            )
+        })?;
         info!("Created data directory at {}", data_dir.display());
     }
 

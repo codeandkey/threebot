@@ -1,4 +1,4 @@
-use super::{Command, SessionTools, CommandContext};
+use super::{Command, CommandContext, SessionTools};
 use crate::error::Error;
 
 #[derive(Default)]
@@ -6,7 +6,12 @@ pub struct AliasCommand;
 
 #[async_trait::async_trait]
 impl Command for AliasCommand {
-    async fn execute(&mut self, tools: &dyn SessionTools, context: CommandContext, mut args: Vec<String>) -> Result<(), Error> {
+    async fn execute(
+        &mut self,
+        tools: &dyn SessionTools,
+        context: CommandContext,
+        mut args: Vec<String>,
+    ) -> Result<(), Error> {
         if args.is_empty() {
             // List first page of aliases
             self.list_aliases_paginated(tools, 0).await
@@ -50,7 +55,9 @@ impl Command for AliasCommand {
                     self.list_aliases_paginated(tools, page).await
                 }
                 Err(_) => {
-                    tools.reply("Invalid page number. Usage: **!alias list <page>**").await
+                    tools
+                        .reply("Invalid page number. Usage: **!alias list <page>**")
+                        .await
                 }
             }
         } else if args.len() == 2 && args[0] == "search" {
@@ -60,10 +67,11 @@ impl Command for AliasCommand {
             // Create an alias: !alias <name> <command>
             let alias_name = &args[0];
             let commands = &args[1];
-            
+
             // Get author name from user info
             let author = if let Some(user_id) = context.triggering_user_id {
-                tools.get_user_info(user_id)
+                tools
+                    .get_user_info(user_id)
                     .and_then(|user| user.name.as_ref())
                     .cloned()
                     .unwrap_or_else(|| "unknown".to_string())
@@ -71,7 +79,8 @@ impl Command for AliasCommand {
                 "unknown".to_string()
             };
 
-            self.create_alias(tools, alias_name, &author, commands).await
+            self.create_alias(tools, alias_name, &author, commands)
+                .await
         } else if args.len() == 3 && args[0] == "search" {
             // Search with page: !alias search <term> <page>
             match args[2].parse::<u64>() {
@@ -80,7 +89,9 @@ impl Command for AliasCommand {
                     self.search_aliases(tools, &args[1], page).await
                 }
                 Err(_) => {
-                    tools.reply("Invalid page number. Usage: **!alias search <term> [page]**").await
+                    tools
+                        .reply("Invalid page number. Usage: **!alias search <term> [page]**")
+                        .await
                 }
             }
         } else {
@@ -94,10 +105,11 @@ impl Command for AliasCommand {
             // Create an alias: !alias <name> <commands...>
             let alias_name = &args[0];
             let commands = args[1..].join(" ");
-            
+
             // Get author name from user info
             let author = if let Some(user_id) = context.triggering_user_id {
-                tools.get_user_info(user_id)
+                tools
+                    .get_user_info(user_id)
                     .and_then(|user| user.name.as_ref())
                     .cloned()
                     .unwrap_or_else(|| "unknown".to_string())
@@ -105,10 +117,11 @@ impl Command for AliasCommand {
                 "unknown".to_string()
             };
 
-            self.create_alias(tools, alias_name, &author, &commands).await
+            self.create_alias(tools, alias_name, &author, &commands)
+                .await
         }
     }
-    
+
     fn description(&self) -> &str {
         "Create or list command aliases. Usage: !alias <name> <commands...> or !alias list"
     }
@@ -116,15 +129,25 @@ impl Command for AliasCommand {
 
 impl AliasCommand {
     /// Creates a new alias
-    async fn create_alias(&self, tools: &dyn SessionTools, name: &str, author: &str, commands: &str) -> Result<(), Error> {
+    async fn create_alias(
+        &self,
+        tools: &dyn SessionTools,
+        name: &str,
+        author: &str,
+        commands: &str,
+    ) -> Result<(), Error> {
         // Get the alias manager
         if let Some(alias_manager) = tools.get_alias_manager() {
             match alias_manager.create_alias(name, author, commands).await {
                 Ok(_) => {
-                    tools.reply(&format!("✅ Alias '{}' created successfully", name)).await?;
+                    tools
+                        .reply(&format!("✅ Alias '{}' created successfully", name))
+                        .await?;
                 }
                 Err(e) => {
-                    tools.reply(&format!("❌ Failed to create alias: {}", e)).await?;
+                    tools
+                        .reply(&format!("❌ Failed to create alias: {}", e))
+                        .await?;
                 }
             }
             return Ok(());
@@ -144,14 +167,18 @@ impl AliasCommand {
                     } else {
                         let mut response = String::from("📋 **Aliases:**\n");
                         for alias in aliases {
-                            response.push_str(&format!("• **{}** (by {}): `{}`\n", 
-                                alias.name, alias.author, alias.commands));
+                            response.push_str(&format!(
+                                "• **{}** (by {}): `{}`\n",
+                                alias.name, alias.author, alias.commands
+                            ));
                         }
                         tools.reply(&response).await?;
                     }
                 }
                 Err(e) => {
-                    tools.reply(&format!("❌ Failed to list aliases: {}", e)).await?;
+                    tools
+                        .reply(&format!("❌ Failed to list aliases: {}", e))
+                        .await?;
                 }
             }
             return Ok(());
@@ -161,7 +188,11 @@ impl AliasCommand {
     }
 
     /// Lists aliases with pagination
-    async fn list_aliases_paginated(&self, tools: &dyn SessionTools, page: u64) -> Result<(), Error> {
+    async fn list_aliases_paginated(
+        &self,
+        tools: &dyn SessionTools,
+        page: u64,
+    ) -> Result<(), Error> {
         if let Some(alias_manager) = tools.get_alias_manager() {
             match alias_manager.list_aliases_paginated(page, 20).await {
                 Ok(aliases) => {
@@ -175,29 +206,38 @@ impl AliasCommand {
                         // Get total count for pagination info
                         let total_count = alias_manager.count_aliases().await.unwrap_or(0);
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
-                        
-                        let mut response = format!("📋 **Aliases** (Page {} of {})\n\n", page + 1, total_pages);
-                        
+
+                        let mut response =
+                            format!("📋 **Aliases** (Page {} of {})\n\n", page + 1, total_pages);
+
                         // Prepare table data
                         let headers = &["Name", "Author", "Commands"];
-                        let rows: Vec<Vec<String>> = aliases.iter().map(|alias| {
-                            vec![
-                                format!("<strong>{}</strong>", alias.name),
-                                alias.author.clone(),
-                                format!("<code>{}</code>", alias.commands)
-                            ]
-                        }).collect();
-                        
+                        let rows: Vec<Vec<String>> = aliases
+                            .iter()
+                            .map(|alias| {
+                                vec![
+                                    format!("<strong>{}</strong>", alias.name),
+                                    alias.author.clone(),
+                                    format!("<code>{}</code>", alias.commands),
+                                ]
+                            })
+                            .collect();
+
                         response.push_str(&tools.create_html_table(headers, &rows));
-                        
+
                         if total_pages > 1 {
-                            response.push_str(&format!("\n\nUse `!alias list <page>` to view other pages (1-{})", total_pages));
+                            response.push_str(&format!(
+                                "\n\nUse `!alias list <page>` to view other pages (1-{})",
+                                total_pages
+                            ));
                         }
                         tools.reply_html(&response).await?;
                     }
                 }
                 Err(e) => {
-                    tools.reply(&format!("❌ Failed to list aliases: {}", e)).await?;
+                    tools
+                        .reply(&format!("❌ Failed to list aliases: {}", e))
+                        .await?;
                 }
             }
             return Ok(());
@@ -207,43 +247,71 @@ impl AliasCommand {
     }
 
     /// Searches aliases with pagination
-    async fn search_aliases(&self, tools: &dyn SessionTools, search_term: &str, page: u64) -> Result<(), Error> {
+    async fn search_aliases(
+        &self,
+        tools: &dyn SessionTools,
+        search_term: &str,
+        page: u64,
+    ) -> Result<(), Error> {
         if let Some(alias_manager) = tools.get_alias_manager() {
             match alias_manager.search_aliases(search_term, page, 20).await {
                 Ok(aliases) => {
                     if aliases.is_empty() {
                         if page == 0 {
-                            tools.reply(&format!("🔍 No aliases found matching '{}'", search_term)).await?;
+                            tools
+                                .reply(&format!("🔍 No aliases found matching '{}'", search_term))
+                                .await?;
                         } else {
-                            tools.reply(&format!("🔍 No aliases found matching '{}' on this page", search_term)).await?;
+                            tools
+                                .reply(&format!(
+                                    "🔍 No aliases found matching '{}' on this page",
+                                    search_term
+                                ))
+                                .await?;
                         }
                     } else {
                         // Get total count for pagination info
-                        let total_count = alias_manager.count_search_aliases(search_term).await.unwrap_or(0);
+                        let total_count = alias_manager
+                            .count_search_aliases(search_term)
+                            .await
+                            .unwrap_or(0);
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
-                        
-                        let mut response = format!("🔍 **Aliases matching '{}'** (Page {} of {})\n\n", search_term, page + 1, total_pages);
-                        
+
+                        let mut response = format!(
+                            "🔍 **Aliases matching '{}'** (Page {} of {})\n\n",
+                            search_term,
+                            page + 1,
+                            total_pages
+                        );
+
                         // Prepare table data
                         let headers = &["Name", "Author", "Commands"];
-                        let rows: Vec<Vec<String>> = aliases.iter().map(|alias| {
-                            vec![
-                                format!("<strong>{}</strong>", alias.name),
-                                alias.author.clone(),
-                                format!("<code>{}</code>", alias.commands)
-                            ]
-                        }).collect();
-                        
+                        let rows: Vec<Vec<String>> = aliases
+                            .iter()
+                            .map(|alias| {
+                                vec![
+                                    format!("<strong>{}</strong>", alias.name),
+                                    alias.author.clone(),
+                                    format!("<code>{}</code>", alias.commands),
+                                ]
+                            })
+                            .collect();
+
                         response.push_str(&tools.create_html_table(headers, &rows));
-                        
+
                         if total_pages > 1 {
-                            response.push_str(&format!("\n\nUse `!alias search {} <page>` to view other pages (1-{})", search_term, total_pages));
+                            response.push_str(&format!(
+                                "\n\nUse `!alias search {} <page>` to view other pages (1-{})",
+                                search_term, total_pages
+                            ));
                         }
                         tools.reply_html(&response).await?;
                     }
                 }
                 Err(e) => {
-                    tools.reply(&format!("❌ Failed to search aliases: {}", e)).await?;
+                    tools
+                        .reply(&format!("❌ Failed to search aliases: {}", e))
+                        .await?;
                 }
             }
             return Ok(());
@@ -258,13 +326,19 @@ impl AliasCommand {
         if let Some(alias_manager) = tools.get_alias_manager() {
             match alias_manager.delete_alias(name).await {
                 Ok(true) => {
-                    tools.reply(&format!("✅ Alias '{}' removed successfully", name)).await?;
+                    tools
+                        .reply(&format!("✅ Alias '{}' removed successfully", name))
+                        .await?;
                 }
                 Ok(false) => {
-                    tools.reply(&format!("❌ Alias '{}' not found", name)).await?;
+                    tools
+                        .reply(&format!("❌ Alias '{}' not found", name))
+                        .await?;
                 }
                 Err(e) => {
-                    tools.reply(&format!("❌ Failed to remove alias: {}", e)).await?;
+                    tools
+                        .reply(&format!("❌ Failed to remove alias: {}", e))
+                        .await?;
                 }
             }
             return Ok(());

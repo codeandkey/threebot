@@ -1,4 +1,4 @@
-use super::{Command, SessionTools, CommandContext};
+use super::{Command, CommandContext, SessionTools};
 use crate::error::Error;
 
 #[derive(Default)]
@@ -6,12 +6,19 @@ pub struct BindCommand;
 
 #[async_trait::async_trait]
 impl Command for BindCommand {
-    async fn execute(&mut self, tools: &dyn SessionTools, context: CommandContext, args: Vec<String>) -> Result<(), Error> {
+    async fn execute(
+        &mut self,
+        tools: &dyn SessionTools,
+        context: CommandContext,
+        args: Vec<String>,
+    ) -> Result<(), Error> {
         // Get the user ID from the context and get their username
         let user_id = match context.triggering_user_id {
             Some(id) => id,
             None => {
-                tools.reply("❌ Unable to identify user for bind command").await?;
+                tools
+                    .reply("❌ Unable to identify user for bind command")
+                    .await?;
                 return Ok(());
             }
         };
@@ -21,12 +28,16 @@ impl Command for BindCommand {
             Some(user_info) => match &user_info.name {
                 Some(name) if !name.is_empty() => name.clone(),
                 _ => {
-                    tools.reply("❌ Unable to get valid username for bind command").await?;
+                    tools
+                        .reply("❌ Unable to get valid username for bind command")
+                        .await?;
                     return Ok(());
                 }
             },
             None => {
-                tools.reply("❌ Unable to find user information for bind command").await?;
+                tools
+                    .reply("❌ Unable to find user information for bind command")
+                    .await?;
                 return Ok(());
             }
         };
@@ -37,11 +48,15 @@ impl Command for BindCommand {
                 match user_settings_manager.get_bind(&username).await {
                     Ok(Some(bind_command)) => {
                         // Execute the bind command by parsing and running it
-                        tools.reply(&format!("🔗 Executing bind: {}", bind_command)).await?;
-                        
+                        tools
+                            .reply(&format!("🔗 Executing bind: {}", bind_command))
+                            .await?;
+
                         // Execute the command - it should already have the ! prefix from storage
                         if let Err(e) = tools.execute_command(&bind_command, &context).await {
-                            tools.reply(&format!("❌ Error executing bind command: {}", e)).await?;
+                            tools
+                                .reply(&format!("❌ Error executing bind command: {}", e))
+                                .await?;
                         }
                     }
                     Ok(None) => {
@@ -50,40 +65,52 @@ impl Command for BindCommand {
                                     • `!bind sound play ABCD` - Bind a sound").await?;
                     }
                     Err(e) => {
-                        tools.reply(&format!("❌ Error retrieving bind command: {}", e)).await?;
+                        tools
+                            .reply(&format!("❌ Error retrieving bind command: {}", e))
+                            .await?;
                     }
                 }
             } else {
-                tools.reply("❌ User settings manager not available").await?;
+                tools
+                    .reply("❌ User settings manager not available")
+                    .await?;
             }
         } else {
             // Set the user's bind command
             let mut bind_command = args.join(" ");
-            
+
             // Normalize the command - ensure it starts with '!' for consistency
             if !bind_command.starts_with('!') {
                 bind_command = format!("!{}", bind_command);
             }
-            
+
             if let Some(user_settings_manager) = tools.get_user_settings_manager() {
-                match user_settings_manager.set_bind(&username, &bind_command).await {
+                match user_settings_manager
+                    .set_bind(&username, &bind_command)
+                    .await
+                {
                     Ok(()) => {
                         // Show the user what was actually stored (with the !)
-                        tools.reply(&format!("✅ Bind command set to: `{}`", bind_command)).await?;
+                        tools
+                            .reply(&format!("✅ Bind command set to: `{}`", bind_command))
+                            .await?;
                     }
                     Err(e) => {
-                        tools.reply(&format!("❌ Error setting bind command: {}", e)).await?;
+                        tools
+                            .reply(&format!("❌ Error setting bind command: {}", e))
+                            .await?;
                     }
                 }
             } else {
-                tools.reply("❌ User settings manager not available").await?;
+                tools
+                    .reply("❌ User settings manager not available")
+                    .await?;
             }
         }
 
         Ok(())
     }
 
-    
     fn description(&self) -> &str {
         "Set or execute personal bind commands - !bind <command> to set, !bind to execute"
     }
@@ -98,12 +125,12 @@ mod tests {
         let test_cases = vec![
             // Input, Expected output
             ("sound play ABCD", "!sound play ABCD"),
-            ("!sound play ABCD", "!sound play ABCD"), 
+            ("!sound play ABCD", "!sound play ABCD"),
             ("ping", "!ping"),
             ("!ping", "!ping"),
             ("alias myalias", "!alias myalias"),
             ("!alias myalias", "!alias myalias"),
-            ("", "!"), // Edge case
+            ("", "!"),  // Edge case
             ("!", "!"), // Edge case
         ];
 
@@ -113,12 +140,12 @@ mod tests {
             } else {
                 format!("!{}", input)
             };
-            
+
             assert_eq!(normalized, expected, "Failed for input: '{}'", input);
         }
     }
 
-    #[test] 
+    #[test]
     fn test_display_formatting() {
         // Test the display format logic
         let test_cases = vec![
@@ -134,8 +161,12 @@ mod tests {
             } else {
                 stored_command
             };
-            
-            assert_eq!(display, expected_display, "Failed for stored command: '{}'", stored_command);
+
+            assert_eq!(
+                display, expected_display,
+                "Failed for stored command: '{}'",
+                stored_command
+            );
         }
     }
 }

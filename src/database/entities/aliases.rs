@@ -1,6 +1,6 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::Set; 
 use chrono::{DateTime, Utc};
+use sea_orm::Set;
+use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "aliases")]
@@ -19,11 +19,7 @@ impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
     /// Creates a new alias model
-    pub fn new(
-        name: String,
-        author: String,
-        commands: String,
-    ) -> Self {
+    pub fn new(name: String, author: String, commands: String) -> Self {
         Self {
             name,
             author,
@@ -35,11 +31,7 @@ impl Model {
 
 impl ActiveModel {
     /// Creates a new ActiveModel for insertion
-    pub fn new_for_insert(
-        name: String,
-        author: String,
-        commands: String,
-    ) -> Self {
+    pub fn new_for_insert(name: String, author: String, commands: String) -> Self {
         Self {
             name: Set(name),
             author: Set(author),

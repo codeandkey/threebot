@@ -1,5 +1,5 @@
-use sea_orm::entity::prelude::*;
 use sea_orm::Set;
+use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "user_settings")]
@@ -7,7 +7,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String, // Format: "username:setting_type" e.g., "john:bind", "john:greeting"
     pub username: String,
-    pub setting_type: String, // "bind", "greeting", "farewell"
+    pub setting_type: String,  // "bind", "greeting", "farewell"
     pub setting_value: String, // The actual command/sound to execute
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -22,7 +22,7 @@ impl ActiveModel {
     pub fn new_for_user_setting(username: &str, setting_type: &str, setting_value: &str) -> Self {
         let now = chrono::Utc::now();
         let id = format!("{}:{}", username, setting_type);
-        
+
         Self {
             id: Set(id),
             username: Set(username.to_string()),
@@ -46,11 +46,11 @@ impl SettingType {
     pub fn as_str(&self) -> &'static str {
         match self {
             SettingType::Bind => "bind",
-            SettingType::Greeting => "greeting", 
+            SettingType::Greeting => "greeting",
             SettingType::Farewell => "farewell",
         }
     }
-    
+
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "bind" => Some(SettingType::Bind),

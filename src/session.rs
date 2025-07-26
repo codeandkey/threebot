@@ -1,9 +1,9 @@
 use crate::{
-    audio::{AudioMixer, AudioMixerTask}, 
-    commands::{SessionTools, CommandContext, Executor}, 
-    config::{BehaviorSettings, AudioEffectSettings, GreetingMode, FarewellMode},
-    error::Error, 
-    protos::{self, generated::Mumble::CryptSetup}
+    audio::{AudioMixer, AudioMixerTask},
+    commands::{CommandContext, Executor, SessionTools},
+    config::{AudioEffectSettings, BehaviorSettings, FarewellMode, GreetingMode},
+    error::Error,
+    protos::{self, generated::Mumble::CryptSetup},
 };
 use protobuf::{Message, SpecialFields};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName, pem::PemObject};
@@ -35,7 +35,7 @@ fn escape_html(input: &str) -> String {
 /// Converts minimal markdown to HTML for better formatting in Mumble
 pub fn markdown_to_html(input: &str) -> String {
     let mut result = input.to_string();
-    
+
     // Convert **bold** to <b>bold</b>
     while let Some(start) = result.find("**") {
         if let Some(end) = result[start + 2..].find("**") {
@@ -47,7 +47,7 @@ pub fn markdown_to_html(input: &str) -> String {
             break;
         }
     }
-    
+
     // Convert `code` to <tt>code</tt> for monospace with proper HTML escaping
     while let Some(start) = result.find("`") {
         if let Some(end) = result[start + 1..].find("`") {
@@ -59,10 +59,10 @@ pub fn markdown_to_html(input: &str) -> String {
             break;
         }
     }
-    
+
     // Convert newlines to HTML line breaks
     result = result.replace("\n", "<br>");
-    
+
     result
 }
 
@@ -80,10 +80,10 @@ pub struct ConnectionOptions {
 }
 
 pub enum OutgoingMessage {
-    AudioData(Vec<u8>),  // audio data, encoded through opus
+    AudioData(Vec<u8>),       // audio data, encoded through opus
     TextMessage(String, u32), // channel message
     PrivMessage(String, u32), // private message
-    Raw(u16, Vec<u8>),   // raw message type and payload
+    Raw(u16, Vec<u8>),        // raw message type and payload
     Ping,
 }
 
@@ -106,30 +106,24 @@ impl WriterTask {
             writer_task.run().await
         });
 
-        WriterTask {
-            sender,
-            task,
-        }
+        WriterTask { sender, task }
     }
 }
 
 impl Writer {
-    pub fn new(writer: tokio::io::WriteHalf<TlsStream<TcpStream>>, receiver: mpsc::Receiver<OutgoingMessage>) -> Self {
-        Self {
-            writer,
-            receiver,
-        }
+    pub fn new(
+        writer: tokio::io::WriteHalf<TlsStream<TcpStream>>,
+        receiver: mpsc::Receiver<OutgoingMessage>,
+    ) -> Self {
+        Self { writer, receiver }
     }
 
     pub async fn run(mut self) -> Result<(), Error> {
         loop {
             match self.receiver.recv().await {
                 Some(OutgoingMessage::AudioData(data)) => {
-                    self.write_mumble_frame(
-                        protos::types::MESSAGE_UDP_TUNNEL,
-                        data,
-                    )
-                    .await?;
+                    self.write_mumble_frame(protos::types::MESSAGE_UDP_TUNNEL, data)
+                        .await?;
                 }
                 Some(OutgoingMessage::TextMessage(msg, channel)) => {
                     let payload = Mumble::TextMessage {
@@ -140,7 +134,7 @@ impl Writer {
                     .write_to_bytes()?;
                     self.write_mumble_frame(protos::types::MESSAGE_TEXT_MESSAGE, payload)
                         .await?;
-                },
+                }
                 Some(OutgoingMessage::PrivMessage(msg, target)) => {
                     let payload = Mumble::TextMessage {
                         message: Some(msg),
@@ -213,29 +207,34 @@ pub struct Session {
 
 impl Session {
     /// Get the bigbot configuration paths
-    fn get_bigbot_paths_from_dir(data_dir: Option<&str>) -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), Error> {
+    fn get_bigbot_paths_from_dir(
+        data_dir: Option<&str>,
+    ) -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), Error> {
         let bigbot_dir = if let Some(dir) = data_dir {
             std::path::PathBuf::from(dir)
         } else {
             // Get home directory using dirs crate for cross-platform compatibility
-            let home_dir = dirs::home_dir()
-                .ok_or_else(|| Error::ConnectionError("Unable to determine home directory".to_string()))?;
+            let home_dir = dirs::home_dir().ok_or_else(|| {
+                Error::ConnectionError("Unable to determine home directory".to_string())
+            })?;
             home_dir.join(".bigbot")
         };
-        
+
         let sounds_dir = bigbot_dir.join("sounds");
         let database_path = bigbot_dir.join("database.sql");
         let trusted_certs_dir = bigbot_dir.join("trusted_certificates");
-        
+
         // Ensure the .bigbot directory exists
-        std::fs::create_dir_all(&bigbot_dir)
-            .map_err(|e| Error::ConnectionError(format!("Failed to create .bigbot directory: {}", e)))?;
-        
+        std::fs::create_dir_all(&bigbot_dir).map_err(|e| {
+            Error::ConnectionError(format!("Failed to create .bigbot directory: {}", e))
+        })?;
+
         Ok((sounds_dir, database_path, trusted_certs_dir))
     }
 
     /// Get the bigbot configuration paths (using default ~/.bigbot)
-    fn get_bigbot_paths() -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), Error> {
+    fn get_bigbot_paths()
+    -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), Error> {
         Self::get_bigbot_paths_from_dir(None)
     }
 
@@ -289,11 +288,14 @@ impl Session {
         })?;
 
         // Initialize paths
-        let (sounds_dir, database_path, trusted_certs_dir) = Self::get_bigbot_paths_from_dir(options.data_dir.as_deref())?;
+        let (sounds_dir, database_path, trusted_certs_dir) =
+            Self::get_bigbot_paths_from_dir(options.data_dir.as_deref())?;
 
         let config = ClientConfig::builder()
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verifier::PromptingCertVerifier::with_trust_dir(Some(trusted_certs_dir))))
+            .with_custom_certificate_verifier(Arc::new(
+                verifier::PromptingCertVerifier::with_trust_dir(Some(trusted_certs_dir)),
+            ))
             .with_client_auth_cert(cert_chain, key_der)?;
 
         let server_name = if let Ok(ip_addr) = options.host.parse::<std::net::IpAddr>() {
@@ -369,12 +371,18 @@ impl Session {
                 manager
             }
             Err(e) => {
-                return Err(Error::DatabaseError(format!("Failed to initialize database: {}", e)));
+                return Err(Error::DatabaseError(format!(
+                    "Failed to initialize database: {}",
+                    e
+                )));
             }
         };
 
         // Initialize sounds manager
-        let sounds_manager = match crate::sounds::SoundsManager::new(database_manager.connection_clone(), sounds_dir) {
+        let sounds_manager = match crate::sounds::SoundsManager::new(
+            database_manager.connection_clone(),
+            sounds_dir,
+        ) {
             Ok(manager) => {
                 info!("Sounds manager initialized successfully");
                 Some(Arc::new(manager))
@@ -394,7 +402,8 @@ impl Session {
 
         // Initialize user settings manager
         let user_settings_manager = {
-            let manager = crate::user_settings::UserSettingsManager::new(database_manager.connection_clone());
+            let manager =
+                crate::user_settings::UserSettingsManager::new(database_manager.connection_clone());
             info!("User settings manager initialized successfully");
             Some(Arc::new(manager))
         };
@@ -517,15 +526,15 @@ impl Session {
                 }
                 protos::types::MESSAGE_SERVER_SYNC => {
                     let server_sync = Mumble::ServerSync::parse_from_bytes(&msg_payload)?;
-                    
+
                     // Set current user and channel from server sync
                     if let Some(session_id) = server_sync.session {
                         self.current_user_id = Some(session_id);
                         debug!("Set current user ID to: {}", session_id);
-                        
+
                         // Try to set channel from user state
                         self.try_set_channel_from_user_state();
-                        
+
                         // Fallback: set to root channel if we still don't have one
                         if self.current_channel_id.is_none() {
                             self.current_channel_id = Some(0);
@@ -581,32 +590,38 @@ impl Session {
                     }
 
                     let session_id = user_state.session.unwrap();
-                    
+
                     debug!(
                         "Received user state for {} (session: {})",
                         user_state.name.as_ref().unwrap_or(&"(unknown)".to_string()),
                         session_id
                     );
-                    
+
                     // Check if this is a new user joining (not already in our users map)
-                    let is_new_user = !self.users.contains_key(&session_id) && Some(session_id) != self.current_user_id;
-                    
+                    let is_new_user = !self.users.contains_key(&session_id)
+                        && Some(session_id) != self.current_user_id;
+
                     // Store the user state, but preserve username if it exists in previous state
                     let mut updated_user_state = user_state.clone();
-                    if updated_user_state.name.is_none() || updated_user_state.name.as_ref().unwrap().is_empty() {
+                    if updated_user_state.name.is_none()
+                        || updated_user_state.name.as_ref().unwrap().is_empty()
+                    {
                         // If the new state has no username, try to preserve the old one
                         if let Some(existing_user) = self.users.get(&session_id) {
                             if let Some(existing_name) = &existing_user.name {
                                 if !existing_name.is_empty() {
-                                    debug!("Preserving username '{}' for session {}", existing_name, session_id);
+                                    debug!(
+                                        "Preserving username '{}' for session {}",
+                                        existing_name, session_id
+                                    );
                                     updated_user_state.name = Some(existing_name.clone());
                                 }
                             }
                         }
                     }
-                    
+
                     self.users.insert(session_id, updated_user_state.clone());
-                    
+
                     // If this is our user, try to update current channel
                     if Some(session_id) == self.current_user_id {
                         self.try_set_channel_from_user_state();
@@ -614,20 +629,30 @@ impl Session {
                     // Also try if we haven't identified our user yet but this might be us
                     // (this handles the case where USER_STATE comes before SERVER_SYNC)
                     else if self.current_user_id.is_none() && self.current_channel_id.is_none() {
-                        debug!("Received user state for session {} before knowing our own ID", session_id);
+                        debug!(
+                            "Received user state for session {} before knowing our own ID",
+                            session_id
+                        );
                     }
                     // Handle new user joining - play their greeting sound
                     else if is_new_user {
-                        let user_name = updated_user_state.name.as_ref().unwrap_or(&"(unknown)".to_string()).clone();
+                        let user_name = updated_user_state
+                            .name
+                            .as_ref()
+                            .unwrap_or(&"(unknown)".to_string())
+                            .clone();
                         info!("New user joined: {} (session: {})", user_name, session_id);
-                        
+
                         // Play greeting sound in the background only if auto_greetings is enabled
                         if !matches!(self.behavior_settings.auto_greetings, GreetingMode::None) {
                             if let Err(e) = self.play_user_greeting(session_id).await {
                                 warn!("Failed to play greeting for user {}: {}", user_name, e);
                             }
                         } else {
-                            debug!("Auto greetings disabled, skipping greeting for user {}", user_name);
+                            debug!(
+                                "Auto greetings disabled, skipping greeting for user {}",
+                                user_name
+                            );
                         }
                     }
                 }
@@ -639,22 +664,27 @@ impl Session {
                     }
 
                     let session_id = user_remove.session.unwrap();
-                    
+
                     // Get user info before removing them
-                    let user_name = self.users.get(&session_id)
+                    let user_name = self
+                        .users
+                        .get(&session_id)
                         .and_then(|user| user.name.as_ref())
                         .unwrap_or(&"(unknown)".to_string())
                         .clone();
-                        
+
                     info!("User left: {} (session: {})", user_name, session_id);
-                    
+
                     // Play farewell sound before removing user data only if auto_farewells is enabled
                     if !matches!(self.behavior_settings.auto_farewells, FarewellMode::None) {
                         if let Err(e) = self.play_user_farewell(session_id).await {
                             warn!("Failed to play farewell for user {}: {}", user_name, e);
                         }
                     } else {
-                        debug!("Auto farewells disabled, skipping farewell for user {}", user_name);
+                        debug!(
+                            "Auto farewells disabled, skipping farewell for user {}",
+                            user_name
+                        );
                     }
 
                     self.users.remove(&session_id);
@@ -694,10 +724,18 @@ impl Session {
 
                         // Check if private commands are allowed
                         if is_private_message && !self.behavior_settings.allow_private_commands {
-                            debug!("Private command from {} ignored (private commands disabled)", name);
+                            debug!(
+                                "Private command from {} ignored (private commands disabled)",
+                                name
+                            );
                             let error_msg = "Private commands are disabled on this bot.";
-                            if let Err(reply_err) = self.send_private_message(actor_id, error_msg).await {
-                                warn!("Failed to send private command disabled message: {}", reply_err);
+                            if let Err(reply_err) =
+                                self.send_private_message(actor_id, error_msg).await
+                            {
+                                warn!(
+                                    "Failed to send private command disabled message: {}",
+                                    reply_err
+                                );
                             }
                             continue;
                         }
@@ -718,7 +756,9 @@ impl Session {
                                 warn!("Command execution failed: {}", e);
                                 // Send error message back to user
                                 let error_msg = format!("Command error: {}", e);
-                                if let Err(reply_err) = self.send_error_reply(&error_msg, actor_id).await {
+                                if let Err(reply_err) =
+                                    self.send_error_reply(&error_msg, actor_id).await
+                                {
                                     warn!("Failed to send error reply: {}", reply_err);
                                 }
                             }
@@ -740,11 +780,20 @@ impl Session {
         &self.writer.sender
     }
 
-    async fn execute_command_internal(&mut self, command_text: &str, context: CommandContext) -> Result<(), Error> {
-        debug!("Executing command '{}' with current_channel_id: {:?}", command_text, self.current_channel_id);
-        
+    async fn execute_command_internal(
+        &mut self,
+        command_text: &str,
+        context: CommandContext,
+    ) -> Result<(), Error> {
+        debug!(
+            "Executing command '{}' with current_channel_id: {:?}",
+            command_text, self.current_channel_id
+        );
+
         // Execute the command using self directly as SessionTools
-        self.command_executor.execute(command_text, self, context).await
+        self.command_executor
+            .execute(command_text, self, context)
+            .await
     }
 
     async fn send_error_reply(&self, error_msg: &str, actor_id: u32) -> Result<(), Error> {
@@ -764,7 +813,10 @@ impl Session {
                     debug!("Our user state (session {}) has no channel_id yet", user_id);
                 }
             } else {
-                debug!("Our user state (session {}) not found in users map", user_id);
+                debug!(
+                    "Our user state (session {}) not found in users map",
+                    user_id
+                );
             }
         }
     }
@@ -774,7 +826,7 @@ impl Session {
         // Check if greetings are enabled
         match self.behavior_settings.auto_greetings {
             GreetingMode::None => return Ok(()), // No greetings
-            _ => {} // Continue with greeting logic
+            _ => {}                              // Continue with greeting logic
         }
 
         // Get the username from the user ID
@@ -800,24 +852,37 @@ impl Session {
             }
         };
 
-        debug!("Attempting to play greeting for user {} ({})", username, user_id);
+        debug!(
+            "Attempting to play greeting for user {} ({})",
+            username, user_id
+        );
 
         if let Some(user_settings_manager) = &self.user_settings_manager {
             // Try to get the user's custom greeting
             match user_settings_manager.get_greeting(&username).await {
                 Ok(Some(greeting_command)) => {
-                    info!("Playing custom greeting for user {} ({}): {}", username, user_id, greeting_command);
-                    
+                    info!(
+                        "Playing custom greeting for user {} ({}): {}",
+                        username, user_id, greeting_command
+                    );
+
                     // Create a context for the greeting command execution
                     let context = crate::commands::CommandContext {
                         triggering_user_id: Some(user_id),
                         source_channel_id: self.current_channel_id,
                         is_private_message: false,
                     };
-                    
+
                     // Execute the greeting command
-                    if let Err(e) = self.command_executor.execute(&greeting_command, self, context).await {
-                        warn!("Failed to execute greeting command '{}' for user {} ({}): {}", greeting_command, username, user_id, e);
+                    if let Err(e) = self
+                        .command_executor
+                        .execute(&greeting_command, self, context)
+                        .await
+                    {
+                        warn!(
+                            "Failed to execute greeting command '{}' for user {} ({}): {}",
+                            greeting_command, username, user_id, e
+                        );
                         // Fall back to random sound only in "All" mode
                         if matches!(self.behavior_settings.auto_greetings, GreetingMode::All) {
                             self.play_random_greeting_sound().await?;
@@ -829,12 +894,18 @@ impl Session {
                     match self.behavior_settings.auto_greetings {
                         GreetingMode::All => {
                             // Play random sound when no custom greeting exists
-                            info!("No custom greeting for user {} ({}), playing random sound", username, user_id);
+                            info!(
+                                "No custom greeting for user {} ({}), playing random sound",
+                                username, user_id
+                            );
                             self.play_random_greeting_sound().await?;
                         }
                         GreetingMode::Custom => {
                             // In custom mode, only play custom greetings - stay silent if none exists
-                            debug!("No custom greeting for user {} ({}) and in custom mode, staying silent", username, user_id);
+                            debug!(
+                                "No custom greeting for user {} ({}) and in custom mode, staying silent",
+                                username, user_id
+                            );
                         }
                         GreetingMode::None => {
                             // Already handled above, but included for completeness
@@ -842,7 +913,10 @@ impl Session {
                     }
                 }
                 Err(e) => {
-                    warn!("Error checking greeting for user {} ({}): {}", username, user_id, e);
+                    warn!(
+                        "Error checking greeting for user {} ({}): {}",
+                        username, user_id, e
+                    );
                     // Fall back to random sound only in "All" mode
                     if matches!(self.behavior_settings.auto_greetings, GreetingMode::All) {
                         self.play_random_greeting_sound().await?;
@@ -863,7 +937,7 @@ impl Session {
         // Check if farewells are enabled
         match self.behavior_settings.auto_farewells {
             FarewellMode::None => return Ok(()), // No farewells
-            _ => {} // Continue with farewell logic
+            _ => {}                              // Continue with farewell logic
         }
 
         // Get the username from the user ID
@@ -889,24 +963,37 @@ impl Session {
             }
         };
 
-        debug!("Attempting to play farewell for user {} ({})", username, user_id);
+        debug!(
+            "Attempting to play farewell for user {} ({})",
+            username, user_id
+        );
 
         if let Some(user_settings_manager) = &self.user_settings_manager {
             // Try to get the user's custom farewell
             match user_settings_manager.get_farewell(&username).await {
                 Ok(Some(farewell_command)) => {
-                    info!("Playing custom farewell for user {} ({}): {}", username, user_id, farewell_command);
-                    
+                    info!(
+                        "Playing custom farewell for user {} ({}): {}",
+                        username, user_id, farewell_command
+                    );
+
                     // Create a context for the farewell command execution
                     let context = crate::commands::CommandContext {
                         triggering_user_id: Some(user_id),
                         source_channel_id: self.current_channel_id,
                         is_private_message: false,
                     };
-                    
+
                     // Execute the farewell command
-                    if let Err(e) = self.command_executor.execute(&farewell_command, self, context).await {
-                        warn!("Failed to execute farewell command '{}' for user {} ({}): {}", farewell_command, username, user_id, e);
+                    if let Err(e) = self
+                        .command_executor
+                        .execute(&farewell_command, self, context)
+                        .await
+                    {
+                        warn!(
+                            "Failed to execute farewell command '{}' for user {} ({}): {}",
+                            farewell_command, username, user_id, e
+                        );
                         // Fall back to random sound only in "All" mode
                         if matches!(self.behavior_settings.auto_farewells, FarewellMode::All) {
                             self.play_random_greeting_sound().await?;
@@ -918,12 +1005,18 @@ impl Session {
                     match self.behavior_settings.auto_farewells {
                         FarewellMode::All => {
                             // Play random sound when no custom farewell exists
-                            info!("No custom farewell for user {} ({}), playing random sound", username, user_id);
+                            info!(
+                                "No custom farewell for user {} ({}), playing random sound",
+                                username, user_id
+                            );
                             self.play_random_greeting_sound().await?;
                         }
                         FarewellMode::Custom => {
                             // In custom mode, only play custom farewells - stay silent if none exists
-                            debug!("No custom farewell for user {} ({}) and in custom mode, staying silent", username, user_id);
+                            debug!(
+                                "No custom farewell for user {} ({}) and in custom mode, staying silent",
+                                username, user_id
+                            );
                         }
                         FarewellMode::None => {
                             // Already handled above, but included for completeness
@@ -931,7 +1024,10 @@ impl Session {
                     }
                 }
                 Err(e) => {
-                    warn!("Error checking farewell for user {} ({}): {}", username, user_id, e);
+                    warn!(
+                        "Error checking farewell for user {} ({}): {}",
+                        username, user_id, e
+                    );
                     // Fall back to random sound only in "All" mode
                     if matches!(self.behavior_settings.auto_farewells, FarewellMode::All) {
                         self.play_random_greeting_sound().await?;
@@ -955,8 +1051,12 @@ impl Session {
             source_channel_id: self.current_channel_id,
             is_private_message: false,
         };
-        
-        if let Err(e) = self.command_executor.execute("!sound play", self, context).await {
+
+        if let Err(e) = self
+            .command_executor
+            .execute("!sound play", self, context)
+            .await
+        {
             warn!("Failed to execute random greeting sound command: {}", e);
         }
         Ok(())
@@ -971,13 +1071,25 @@ impl Session {
 #[async_trait::async_trait]
 impl SessionTools for Session {
     async fn play_sound(&self, file_path: &str) -> Result<(), Error> {
-        self.audio_mixer.control().play_sound(file_path).await
+        self.audio_mixer
+            .control()
+            .play_sound(file_path)
+            .await
             .map_err(|e| Error::ConnectionError(format!("Failed to play sound: {}", e)))
     }
 
-    async fn play_sound_with_effects(&self, file_path: &str, effects: &[crate::audio::effects::AudioEffect]) -> Result<(), Error> {
-        self.audio_mixer.control().play_sound_with_effects(file_path, effects).await
-            .map_err(|e| Error::ConnectionError(format!("Failed to play sound with effects: {}", e)))
+    async fn play_sound_with_effects(
+        &self,
+        file_path: &str,
+        effects: &[crate::audio::effects::AudioEffect],
+    ) -> Result<(), Error> {
+        self.audio_mixer
+            .control()
+            .play_sound_with_effects(file_path, effects)
+            .await
+            .map_err(|e| {
+                Error::ConnectionError(format!("Failed to play sound with effects: {}", e))
+            })
     }
 
     async fn stop_all_streams(&self) -> Result<(), Error> {
@@ -986,8 +1098,12 @@ impl SessionTools for Session {
     }
 
     async fn send_channel_message(&self, channel_id: u32, message: &str) -> Result<(), Error> {
-        self.writer.sender
-            .send(OutgoingMessage::TextMessage(message.to_string(), channel_id))
+        self.writer
+            .sender
+            .send(OutgoingMessage::TextMessage(
+                message.to_string(),
+                channel_id,
+            ))
             .await
             .map_err(|e| Error::ConnectionError(format!("Failed to send channel message: {}", e)))
     }
@@ -1001,7 +1117,8 @@ impl SessionTools for Session {
     }
 
     async fn send_private_message(&self, user_id: u32, message: &str) -> Result<(), Error> {
-        self.writer.sender
+        self.writer
+            .sender
             .send(OutgoingMessage::PrivMessage(message.to_string(), user_id))
             .await
             .map_err(|e| Error::ConnectionError(format!("Failed to send private message: {}", e)))
@@ -1032,7 +1149,10 @@ impl SessionTools for Session {
         self.users.get(&user_id)
     }
 
-    fn get_channel_info(&self, channel_id: u32) -> Option<&crate::protos::generated::Mumble::ChannelState> {
+    fn get_channel_info(
+        &self,
+        channel_id: u32,
+    ) -> Option<&crate::protos::generated::Mumble::ChannelState> {
         self.channels.get(&channel_id)
     }
 
@@ -1044,12 +1164,16 @@ impl SessionTools for Session {
         self.alias_manager.clone()
     }
 
-    fn get_user_settings_manager(&self) -> Option<std::sync::Arc<crate::user_settings::UserSettingsManager>> {
+    fn get_user_settings_manager(
+        &self,
+    ) -> Option<std::sync::Arc<crate::user_settings::UserSettingsManager>> {
         self.user_settings_manager.clone()
     }
 
     async fn execute_command(&self, command: &str, context: &CommandContext) -> Result<(), Error> {
-        self.command_executor.execute(command, self, context.clone()).await
+        self.command_executor
+            .execute(command, self, context.clone())
+            .await
     }
 
     fn behavior_settings(&self) -> &crate::config::BehaviorSettings {
@@ -1104,10 +1228,7 @@ mod tests {
         );
 
         // Test unclosed code block (should remain unchanged if no closing backtick)
-        assert_eq!(
-            markdown_to_html("Start `code here"),
-            "Start `code here"
-        );
+        assert_eq!(markdown_to_html("Start `code here"), "Start `code here");
 
         // Test bullets with newlines converted to <br>
         assert_eq!(

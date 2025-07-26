@@ -12,8 +12,9 @@ impl DatabaseManager {
     pub async fn new(database_path: &Path) -> Result<Self, Error> {
         // Ensure the database directory exists
         if let Some(parent) = database_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| Error::DatabaseError(format!("Failed to create database directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::DatabaseError(format!("Failed to create database directory: {}", e))
+            })?;
         }
 
         // Create database URL and connect
