@@ -58,6 +58,8 @@ pub struct BehaviorSettings {
     pub random_modifier_chance: f32,
     /// Number of rounds to potentially apply random modifiers
     pub random_modifier_rounds: u32,
+    /// Audio buffer size in samples (larger = more latency but smoother on slow machines)
+    pub audio_buffer_size: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,6 +146,7 @@ impl Default for BotConfig {
                 random_modifiers_enabled: true,
                 random_modifier_chance: 0.05, // 5% chance per round
                 random_modifier_rounds: 2,
+                audio_buffer_size: 8192, // Default buffer size (good balance of latency vs performance)
             },
             audio_effects: AudioEffectSettings {
                 loud_boost_db: 6.0,
@@ -153,8 +156,8 @@ impl Default for BotConfig {
                 pitch_down_cents: -200,
                 bass_boost_frequency_hz: 50.0,
                 bass_boost_gain_db: 25.0,
-                reverb_room_size: 0.5,
-                reverb_damping: 0.5,
+                reverb_room_size: 1.0,  // Was 0.5, now 1.0 to match "100" parameter
+                reverb_damping: 1.0,    // Was 0.5, now 1.0 to match "100" parameter
                 echo_delay_ms: 300,
                 echo_feedback: 0.3,
             },
@@ -249,6 +252,9 @@ behavior:
   random_modifier_chance: 0.05
   # Number of rounds to potentially apply random modifiers (2 = two 5% chances)
   random_modifier_rounds: 2
+  # Audio buffer size in bytes (larger = more latency but smoother on slow machines)
+  # Default: 8192, Low-end machines: 16384 or 32768, High-end machines: 4096
+  audio_buffer_size: 8192
 
 # Audio effect parameters
 audio_effects:
@@ -267,9 +273,9 @@ audio_effects:
   # Bass boost gain for 'bass' effect (in dB)
   bass_boost_gain_db: 25.0
   # Reverb room size (0.0-1.0, larger = more reverb)
-  reverb_room_size: 0.5
+  reverb_room_size: 1.0
   # Reverb damping (0.0-1.0, higher = less bright reverb)
-  reverb_damping: 0.5
+  reverb_damping: 1.0
   # Echo delay time (in milliseconds)
   echo_delay_ms: 300
   # Echo feedback amount (0.0-1.0, higher = more repeats)
@@ -388,7 +394,6 @@ paths:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[test]
     fn test_default_config() {

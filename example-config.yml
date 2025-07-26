@@ -44,6 +44,8 @@ behavior:
   random_modifier_chance: 0.05
   # Number of rounds to potentially apply random modifiers (2 = two 5% chances)
   random_modifier_rounds: 2
+  # Buffer size for audio processing (in samples)
+  audio_buffer_size: 8192
 
 # Audio effect parameters
 audio_effects:

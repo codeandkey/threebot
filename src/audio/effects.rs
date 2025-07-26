@@ -1,7 +1,7 @@
-use crate::error::Error;
+use crate::{config::AudioEffectSettings, error::Error};
 use std::path::Path;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::AsyncBufReadExt;
 
 /// Available audio effects that can be applied to sounds
 #[derive(Debug, Clone, PartialEq)]
@@ -32,31 +32,42 @@ impl AudioEffect {
         }
     }
 
-    /// Get a description of the effect
-    pub fn description(&self) -> &'static str {
+    /// Get a description of the effect with configuration parameters
+    pub fn description(&self, config: &AudioEffectSettings) -> String {
         match self {
-            AudioEffect::Loud => "Increase volume (+6dB)",
-            AudioEffect::Fast => "Increase speed/tempo (1.5x)",
-            AudioEffect::Slow => "Decrease speed/tempo (0.75x)",
-            AudioEffect::Reverb => "Add reverb effect",
-            AudioEffect::Echo => "Add echo effect",
-            AudioEffect::Up => "Pitch up (+200 cents)",
-            AudioEffect::Down => "Pitch down (-200 cents)",
-            AudioEffect::Bass => "Bass boost (+25dB at 50Hz)",
+            AudioEffect::Loud => format!("Increase volume (+{}dB)", config.loud_boost_db),
+            AudioEffect::Fast => format!("Increase speed/tempo ({}x)", config.fast_speed_multiplier),
+            AudioEffect::Slow => format!("Decrease speed/tempo ({}x)", config.slow_speed_multiplier),
+            AudioEffect::Reverb => "Add reverb effect".to_string(),
+            AudioEffect::Echo => format!("Add echo effect ({}ms delay, {} feedback)", config.echo_delay_ms, config.echo_feedback),
+            AudioEffect::Up => format!("Pitch up (+{} cents)", config.pitch_up_cents),
+            AudioEffect::Down => format!("Pitch down ({} cents)", config.pitch_down_cents),
+            AudioEffect::Bass => format!("Bass boost (+{}dB at {}Hz)", config.bass_boost_gain_db, config.bass_boost_frequency_hz),
         }
     }
 
-    /// Get the ffmpeg filter string for this effect
-    fn to_ffmpeg_filter(&self) -> &'static str {
+    /// Get the ffmpeg filter string for this effect with configuration parameters
+    fn to_ffmpeg_filter(&self, config: &AudioEffectSettings) -> String {
         match self {
-            AudioEffect::Loud => "volume=6dB",
-            AudioEffect::Fast => "atempo=1.5",
-            AudioEffect::Slow => "atempo=0.75",
+            AudioEffect::Loud => format!("volume={}dB", config.loud_boost_db),
+            AudioEffect::Fast => format!("atempo={}", config.fast_speed_multiplier),
+            AudioEffect::Slow => format!("atempo={}", config.slow_speed_multiplier),
             AudioEffect::Reverb => panic!("Reverb effect should be handled by sox, not ffmpeg"),
-            AudioEffect::Echo => "aecho=0.8:0.9:1000:0.3",
-            AudioEffect::Up => "asetrate=48000*1.122462,aresample=48000", // +200 cents
-            AudioEffect::Down => "asetrate=48000*0.890899,aresample=48000", // -200 cents
-            AudioEffect::Bass => "equalizer=f=50:width_type=h:width=50:g=25", // +25dB bass boost at 50Hz
+            AudioEffect::Echo => format!("aecho=0.8:0.9:{}:{}",config.echo_delay_ms, config.echo_feedback),
+            AudioEffect::Up => {
+                // Convert cents to frequency ratio: ratio = 2^(cents/1200)
+                let ratio = 2.0_f64.powf(config.pitch_up_cents as f64 / 1200.0);
+                format!("asetrate=48000*{:.6},aresample=48000", ratio)
+            },
+            AudioEffect::Down => {
+                // Convert cents to frequency ratio: ratio = 2^(cents/1200)
+                let ratio = 2.0_f64.powf(config.pitch_down_cents as f64 / 1200.0);
+                format!("asetrate=48000*{:.6},aresample=48000", ratio)
+            },
+            AudioEffect::Bass => format!("equalizer=f={}:width_type=h:width={}:g={}", 
+                config.bass_boost_frequency_hz, 
+                config.bass_boost_frequency_hz, 
+                config.bass_boost_gain_db),
         }
     }
 
@@ -86,11 +97,15 @@ enum PipelineStage {
 /// - Mixed effects: ffmpeg -> sox -> ffmpeg (format + reverb + other effects)
 struct PipelineBuilder {
     stages: Vec<PipelineStage>,
+    config: AudioEffectSettings,
 }
 
 impl PipelineBuilder {
-    fn new() -> Self {
-        Self { stages: Vec::new() }
+    fn new(config: AudioEffectSettings) -> Self {
+        Self { 
+            stages: Vec::new(), 
+            config 
+        }
     }
 
     /// Add an ffmpeg stage (typically used for initial file processing or final output)
@@ -195,7 +210,12 @@ impl PipelineBuilder {
             .arg("2") // Channels: 2 (stereo)
             .arg("-") // Output to stdout
             .args([
-                "gain", "-3", "pad", "0", "4", "reverb", "100", "100", "100", "100", "200",
+                "gain", "-3", "pad", "0", "4", "reverb", 
+                &format!("{}", (self.config.reverb_room_size * 100.0) as u32),
+                &format!("{}", (self.config.reverb_room_size * 100.0) as u32),
+                &format!("{}", (self.config.reverb_damping * 100.0) as u32),
+                &format!("{}", (self.config.reverb_damping * 100.0) as u32),
+                "200", // Keep fixed for now, could be configurable
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -220,6 +240,7 @@ impl PipelineBuilder {
 
         // Start all processes
         let mut processes: Vec<tokio::process::Child> = Vec::new();
+        let mut stderr_handles: Vec<tokio::task::JoinHandle<Vec<String>>> = Vec::new();
 
         for (i, stage) in self.stages.into_iter().enumerate() {
             let mut child = match stage {
@@ -231,18 +252,26 @@ impl PipelineBuilder {
                         Error::IOError(e)
                     })?;
                     
-                    // Spawn task to read and log stderr
-                    if let Some(stderr) = child.stderr.take() {
+                    // Spawn task to capture stderr (don't log immediately)
+                    let stderr_handle = if let Some(stderr) = child.stderr.take() {
                         let stage_num = i;
-                        tokio::spawn(async move {
+                        Some(tokio::spawn(async move {
                             let mut reader = tokio::io::BufReader::new(stderr);
                             let mut line = String::new();
+                            let mut lines = Vec::new();
                             while let Ok(n) = reader.read_line(&mut line).await {
                                 if n == 0 { break; }
-                                log::debug!("FFmpeg stage {} stderr: {}", stage_num, line.trim());
+                                lines.push(format!("FFmpeg stage {} stderr: {}", stage_num, line.trim()));
                                 line.clear();
                             }
-                        });
+                            lines
+                        }))
+                    } else {
+                        None
+                    };
+                    
+                    if let Some(handle) = stderr_handle {
+                        stderr_handles.push(handle);
                     }
                     
                     child
@@ -254,18 +283,26 @@ impl PipelineBuilder {
                         Error::IOError(e)
                     })?;
                     
-                    // Spawn task to read and log stderr
-                    if let Some(stderr) = child.stderr.take() {
+                    // Spawn task to capture stderr (don't log immediately)
+                    let stderr_handle = if let Some(stderr) = child.stderr.take() {
                         let stage_num = i;
-                        tokio::spawn(async move {
+                        Some(tokio::spawn(async move {
                             let mut reader = tokio::io::BufReader::new(stderr);
                             let mut line = String::new();
+                            let mut lines = Vec::new();
                             while let Ok(n) = reader.read_line(&mut line).await {
                                 if n == 0 { break; }
-                                log::debug!("Sox stage {} stderr: {}", stage_num, line.trim());
+                                lines.push(format!("Sox stage {} stderr: {}", stage_num, line.trim()));
                                 line.clear();
                             }
-                        });
+                            lines
+                        }))
+                    } else {
+                        None
+                    };
+                    
+                    if let Some(handle) = stderr_handle {
+                        stderr_handles.push(handle);
                     }
                     
                     child
@@ -305,6 +342,16 @@ impl PipelineBuilder {
 
         // Spawn a cleanup task for intermediate processes
         tokio::spawn(async move {
+            // Collect stderr output for potential error reporting
+            let mut all_stderr: Vec<Vec<String>> = Vec::new();
+            for handle in stderr_handles {
+                match handle.await {
+                    Ok(stderr_lines) => all_stderr.push(stderr_lines),
+                    Err(e) => log::error!("Failed to collect stderr: {}", e),
+                }
+            }
+
+            // Wait for all intermediate processes and check exit status
             for (i, mut process) in processes.into_iter().enumerate() {
                 match process.wait().await {
                     Ok(status) => {
@@ -316,9 +363,25 @@ impl PipelineBuilder {
                                 i,
                                 status.code().unwrap_or(-1)
                             );
+                            
+                            // Dump stderr for this failed stage
+                            if i < all_stderr.len() {
+                                for stderr_line in &all_stderr[i] {
+                                    log::error!("{}", stderr_line);
+                                }
+                            }
                         }
                     }
-                    Err(e) => log::error!("Error waiting for stage {}: {}", i, e),
+                    Err(e) => {
+                        log::error!("Error waiting for stage {}: {}", i, e);
+                        
+                        // Also dump stderr for stages that errored
+                        if i < all_stderr.len() {
+                            for stderr_line in &all_stderr[i] {
+                                log::error!("{}", stderr_line);
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -329,12 +392,14 @@ impl PipelineBuilder {
 }
 
 /// Audio effects processor that applies effects via real-time ffmpeg piping
-pub struct AudioEffectsProcessor;
+pub struct AudioEffectsProcessor {
+    config: AudioEffectSettings,
+}
 
 impl AudioEffectsProcessor {
-    /// Create a new audio effects processor
-    pub fn new() -> Result<Self, Error> {
-        Ok(AudioEffectsProcessor)
+    /// Create a new audio effects processor with configuration
+    pub fn new(config: AudioEffectSettings) -> Result<Self, Error> {
+        Ok(AudioEffectsProcessor { config })
     }
 
     /// Apply a chain of effects to an audio file using real-time streaming
@@ -354,7 +419,7 @@ impl AudioEffectsProcessor {
         }
 
         // Build the pipeline stages
-        let mut pipeline = PipelineBuilder::new();
+        let mut pipeline = PipelineBuilder::new(self.config.clone());
 
         // Always start with ffmpeg to decode input to WAV format
         let mut ffmpeg_cmd = tokio::process::Command::new("ffmpeg");
@@ -375,7 +440,7 @@ impl AudioEffectsProcessor {
             // If we only have ffmpeg effects and no reverb, apply them all in the first stage
             let filter_chain = ffmpeg_effects
                 .iter()
-                .map(|effect| effect.to_ffmpeg_filter())
+                .map(|effect| effect.to_ffmpeg_filter(&self.config))
                 .collect::<Vec<_>>()
                 .join(",");
             log::info!("Stage 1: ffmpeg with effects filter: {}", filter_chain);
@@ -397,7 +462,7 @@ impl AudioEffectsProcessor {
         if has_reverb && !ffmpeg_effects.is_empty() {
             let filter_chain = ffmpeg_effects
                 .iter()
-                .map(|effect| effect.to_ffmpeg_filter())
+                .map(|effect| effect.to_ffmpeg_filter(&self.config))
                 .collect::<Vec<_>>()
                 .join(",");
             log::info!("Stage 3: ffmpeg with effects filter: {}", filter_chain);
@@ -495,7 +560,20 @@ mod tests {
     #[test]
     fn test_pipeline_selection() {
         // Test that the correct pipeline logic is selected
-        let _processor = AudioEffectsProcessor::new().unwrap();
+        let config = AudioEffectSettings {
+            loud_boost_db: 6.0,
+            fast_speed_multiplier: 1.5,
+            slow_speed_multiplier: 0.75,
+            pitch_up_cents: 200,
+            pitch_down_cents: -200,
+            bass_boost_frequency_hz: 50.0,
+            bass_boost_gain_db: 25.0,
+            reverb_room_size: 0.5,
+            reverb_damping: 0.5,
+            echo_delay_ms: 300,
+            echo_feedback: 0.3,
+        };
+        let _processor = AudioEffectsProcessor::new(config).unwrap();
 
         // No effects should work
         let no_effects: Vec<AudioEffect> = vec![];
@@ -530,23 +608,37 @@ mod tests {
     #[test]
     fn test_ffmpeg_filter_generation() {
         // Test that effects correctly generate ffmpeg filter strings
-        assert_eq!(AudioEffect::Loud.to_ffmpeg_filter(), "volume=6dB");
-        assert_eq!(AudioEffect::Fast.to_ffmpeg_filter(), "atempo=1.5");
-        assert_eq!(AudioEffect::Slow.to_ffmpeg_filter(), "atempo=0.75");
+        let config = AudioEffectSettings {
+            loud_boost_db: 6.0,
+            fast_speed_multiplier: 1.5,
+            slow_speed_multiplier: 0.75,
+            pitch_up_cents: 200,
+            pitch_down_cents: -200,
+            bass_boost_frequency_hz: 50.0,
+            bass_boost_gain_db: 25.0,
+            reverb_room_size: 0.5,
+            reverb_damping: 0.5,
+            echo_delay_ms: 300,
+            echo_feedback: 0.3,
+        };
+        
+        assert_eq!(AudioEffect::Loud.to_ffmpeg_filter(&config), "volume=6dB");
+        assert_eq!(AudioEffect::Fast.to_ffmpeg_filter(&config), "atempo=1.5");
+        assert_eq!(AudioEffect::Slow.to_ffmpeg_filter(&config), "atempo=0.75");
         assert_eq!(
-            AudioEffect::Echo.to_ffmpeg_filter(),
-            "aecho=0.8:0.9:1000:0.3"
+            AudioEffect::Echo.to_ffmpeg_filter(&config),
+            "aecho=0.8:0.9:300:0.3"
         );
         assert_eq!(
-            AudioEffect::Up.to_ffmpeg_filter(),
+            AudioEffect::Up.to_ffmpeg_filter(&config),
             "asetrate=48000*1.122462,aresample=48000"
         );
         assert_eq!(
-            AudioEffect::Down.to_ffmpeg_filter(),
+            AudioEffect::Down.to_ffmpeg_filter(&config),
             "asetrate=48000*0.890899,aresample=48000"
         );
         assert_eq!(
-            AudioEffect::Bass.to_ffmpeg_filter(),
+            AudioEffect::Bass.to_ffmpeg_filter(&config),
             "equalizer=f=50:width_type=h:width=50:g=25"
         );
 
@@ -554,7 +646,7 @@ mod tests {
         let effects = vec![AudioEffect::Loud, AudioEffect::Fast];
         let filter_chain = effects
             .iter()
-            .map(|effect| effect.to_ffmpeg_filter())
+            .map(|effect| effect.to_ffmpeg_filter(&config))
             .collect::<Vec<_>>()
             .join(",");
         assert_eq!(filter_chain, "volume=6dB,atempo=1.5");

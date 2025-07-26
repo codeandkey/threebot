@@ -362,7 +362,7 @@ impl Session {
 
         info!("Sent authenticate message to server");
 
-        let audio_mixer = AudioMixer::spawn(writer_task.sender.clone(), &options.behavior_settings);
+        let audio_mixer = AudioMixer::spawn(writer_task.sender.clone(), &options.behavior_settings, &options.audio_effects);
 
         // Initialize database manager
         let database_manager = match crate::database::DatabaseManager::new(&database_path).await {

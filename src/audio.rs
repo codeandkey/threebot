@@ -16,7 +16,7 @@ use tokio::{
 
 use opus::Encoder;
 
-use crate::{config::BehaviorSettings, session::OutgoingMessage, util};
+use crate::{config::{BehaviorSettings, AudioEffectSettings}, session::OutgoingMessage, util};
 use effects::{AudioEffect, AudioEffectsProcessor};
 
 pub mod effects;
@@ -36,10 +36,14 @@ struct AudioStream {
 
 pub struct AudioMixerControl {
     streams: Arc<Mutex<Vec<AudioStream>>>,
+    audio_effects: AudioEffectSettings,
+    audio_buffer_size: usize,
 }
 
 pub struct AudioMixerTask {
     streams: Arc<Mutex<Vec<AudioStream>>>,
+    audio_effects: AudioEffectSettings,
+    audio_buffer_size: usize,
     _task_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -47,6 +51,8 @@ impl AudioMixerTask {
     pub fn control(&self) -> AudioMixerControl {
         AudioMixerControl {
             streams: self.streams.clone(),
+            audio_effects: self.audio_effects.clone(),
+            audio_buffer_size: self.audio_buffer_size,
         }
     }
 }
@@ -58,14 +64,19 @@ pub struct AudioMixer {
     seq: u32,
     volume: f32,
     normalizer: Option<VolumeNormalizer>,
+    audio_effects: AudioEffectSettings,
+    // Pre-allocated buffers to reduce allocations in hot path
+    mixed_buffer: Vec<i16>,
+    temp_buffer: Vec<i16>,
 }
 
 impl AudioMixer {
     pub fn spawn(
         writer_sender: mpsc::Sender<OutgoingMessage>,
         behavior_settings: &BehaviorSettings,
+        audio_effects: &AudioEffectSettings,
     ) -> AudioMixerTask {
-        let mut mixer = AudioMixer::new(writer_sender, behavior_settings);
+        let mut mixer = AudioMixer::new(writer_sender, behavior_settings, audio_effects);
         let streams = mixer.streams.clone();
 
         let task_handle = tokio::spawn(async move {
@@ -74,6 +85,8 @@ impl AudioMixer {
 
         AudioMixerTask {
             streams,
+            audio_effects: audio_effects.clone(),
+            audio_buffer_size: behavior_settings.audio_buffer_size,
             _task_handle: task_handle,
         }
     }
@@ -81,6 +94,7 @@ impl AudioMixer {
     pub fn new(
         writer_sender: mpsc::Sender<OutgoingMessage>,
         behavior_settings: &BehaviorSettings,
+        audio_effects: &AudioEffectSettings,
     ) -> Self {
         let normalizer = if behavior_settings.volume_normalization_enabled {
             Some(VolumeNormalizer::new(
@@ -104,6 +118,10 @@ impl AudioMixer {
             seq: 0,
             volume: behavior_settings.volume,
             normalizer,
+            audio_effects: audio_effects.clone(),
+            // Pre-allocate buffers for better performance
+            mixed_buffer: vec![0; FRAME_SAMPLES],
+            temp_buffer: Vec::with_capacity(FRAME_SAMPLES),
         };
 
         mixer
@@ -116,39 +134,55 @@ impl AudioMixer {
         loop {
             interval.tick().await;
 
-            let mut mixed: Vec<i16> = vec![0; FRAME_SAMPLES];
+            // Reuse pre-allocated buffers instead of allocating new ones
+            self.mixed_buffer.fill(0);
             let mut active = 0;
 
-            let mut streams = self.streams.lock().await;
-            streams.retain(|stream| {
-                tokio::task::block_in_place(|| {
-                    let mut pcm = futures::executor::block_on(stream.buffer.lock());
-                    let is_finished = futures::executor::block_on(stream.finished.lock());
+            // Pre-allocate vectors to reduce allocations in hot path
+            let mut streams_to_remove = Vec::new();
 
-                    if pcm.len() < FRAME_SAMPLES {
-                        if *is_finished && !pcm.is_empty() {
-                            // Pad with zeros to complete the last frame
-                            let mut padded = pcm.clone();
-                            padded.resize(FRAME_SAMPLES, 0);
-                            for i in 0..FRAME_SAMPLES {
-                                mixed[i] = mixed[i].saturating_add(padded[i]);
+            {
+                let mut streams = self.streams.lock().await;
+                
+                for (stream_index, stream) in streams.iter().enumerate() {
+                    // Try to acquire locks without blocking - use try_lock for better performance
+                    if let Ok(mut pcm) = stream.buffer.try_lock() {
+                        if let Ok(is_finished) = stream.finished.try_lock() {
+                            if pcm.len() < FRAME_SAMPLES {
+                                if *is_finished && !pcm.is_empty() {
+                                    // Pad with zeros to complete the last frame
+                                    self.temp_buffer.clear();
+                                    self.temp_buffer.extend_from_slice(&pcm);
+                                    self.temp_buffer.resize(FRAME_SAMPLES, 0);
+                                    
+                                    for i in 0..FRAME_SAMPLES {
+                                        self.mixed_buffer[i] = self.mixed_buffer[i].saturating_add(self.temp_buffer[i]);
+                                    }
+                                    pcm.clear();
+                                    active += 1;
+                                    streams_to_remove.push(stream_index);
+                                } else if *is_finished {
+                                    streams_to_remove.push(stream_index);
+                                }
+                                continue;
                             }
-                            pcm.clear();
+
+                            // Process full frame
+                            for i in 0..FRAME_SAMPLES {
+                                self.mixed_buffer[i] = self.mixed_buffer[i].saturating_add(pcm[i]);
+                            }
+
+                            pcm.drain(0..FRAME_SAMPLES);
                             active += 1;
                         }
-                        // Remove finished streams with no data left
-                        return !*is_finished || !pcm.is_empty();
                     }
-
-                    for i in 0..FRAME_SAMPLES {
-                        mixed[i] = mixed[i].saturating_add(pcm[i]);
-                    }
-
-                    pcm.drain(0..FRAME_SAMPLES);
-                    active += 1;
-                    true
-                })
-            });
+                }
+                
+                // Remove finished streams (iterate in reverse to maintain indices)
+                for &index in streams_to_remove.iter().rev() {
+                    streams.remove(index);
+                }
+            }
 
             // If no active streams, don't bother encoding
             if active == 0 {
@@ -157,15 +191,30 @@ impl AudioMixer {
 
             // Apply volume normalization if enabled
             if let Some(ref mut normalizer) = self.normalizer {
-                normalizer.process(&mut mixed);
+                normalizer.process(&mut self.mixed_buffer);
             }
 
             // Apply global volume multiplier to the mixed audio
             if self.volume != 1.0 {
-                for sample in mixed.iter_mut() {
-                    let scaled_sample = (*sample as f32 * self.volume) as i32;
-                    // Clamp to i16 range to prevent overflow
-                    *sample = scaled_sample.max(i16::MIN as i32).min(i16::MAX as i32) as i16;
+                // Use integer arithmetic when possible for better performance
+                if self.volume == 0.5 {
+                    // Common case: half volume can use bit shifting
+                    for sample in self.mixed_buffer.iter_mut() {
+                        *sample = *sample >> 1;
+                    }
+                } else if self.volume == 2.0 {
+                    // Common case: double volume with saturation
+                    for sample in self.mixed_buffer.iter_mut() {
+                        let doubled = (*sample as i32) << 1;
+                        *sample = doubled.max(i16::MIN as i32).min(i16::MAX as i32) as i16;
+                    }
+                } else {
+                    // General case: use floating point
+                    for sample in self.mixed_buffer.iter_mut() {
+                        let scaled_sample = (*sample as f32 * self.volume) as i32;
+                        // Clamp to i16 range to prevent overflow
+                        *sample = scaled_sample.max(i16::MIN as i32).min(i16::MAX as i32) as i16;
+                    }
                 }
             }
 
@@ -181,7 +230,7 @@ impl AudioMixer {
             let seq = util::encode_varint_long(self.seq as u64);
             let mut opus_buf = vec![0; 1000];
 
-            match self.encoder.encode(&mixed[..], &mut opus_buf[..]) {
+            match self.encoder.encode(&self.mixed_buffer[..], &mut opus_buf[..]) {
                 Ok(len) => {
                     opus_buf.truncate(len);
                 }
@@ -242,7 +291,7 @@ impl AudioMixerControl {
         let mut child = if !effects.is_empty() {
             log::info!("Using effects pipeline for {} effects", effects.len());
             // Apply effects using the streaming processor - this now outputs PCM s16le directly
-            let processor = AudioEffectsProcessor::new()
+            let processor = AudioEffectsProcessor::new(self.audio_effects.clone())
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
             // Get the streaming process with effects applied
@@ -270,28 +319,62 @@ impl AudioMixerControl {
                 ])
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::piped()) // Capture stderr instead of discarding
+                .stderr(Stdio::piped()) // Capture stderr for potential error reporting
                 .spawn()?;
             
-            // Log stderr in background task
-            if let Some(stderr) = child.stderr.take() {
-                tokio::spawn(async move {
+            // Capture stderr in background task (don't log immediately)
+            let stderr_handle = if let Some(stderr) = child.stderr.take() {
+                Some(tokio::spawn(async move {
                     let mut reader = tokio::io::BufReader::new(stderr);
                     let mut line = String::new();
+                    let mut lines = Vec::new();
                     while let Ok(n) = reader.read_line(&mut line).await {
                         if n == 0 { break; }
-                        log::debug!("FFmpeg direct conversion stderr: {}", line.trim());
+                        lines.push(format!("FFmpeg direct conversion stderr: {}", line.trim()));
                         line.clear();
                     }
-                });
-            }
+                    lines
+                }))
+            } else {
+                None
+            };
+            
+            // Store stderr handle for later status checking
+            let stderr_handle_for_status = stderr_handle;
+            
+            // Spawn task to monitor process and log stderr on apparent failure
+            tokio::spawn(async move {
+                // Wait for stderr collection to complete
+                // Note: We can't directly wait on the child here since stdout is being consumed
+                // Instead, we check stderr content for error indicators
+                if let Some(handle) = stderr_handle_for_status {
+                    match handle.await {
+                        Ok(stderr_lines) => {
+                            // Check if there are any error indicators in stderr
+                            let has_errors = stderr_lines.iter().any(|line| {
+                                line.contains("Error") || line.contains("failed") || line.contains("Invalid")
+                            });
+                            
+                            // Log stderr if there were apparent errors
+                            if has_errors {
+                                log::error!("FFmpeg direct conversion appears to have failed:");
+                                for stderr_line in stderr_lines {
+                                    log::error!("{}", stderr_line);
+                                }
+                            }
+                        }
+                        Err(e) => log::error!("Failed to collect FFmpeg stderr: {}", e),
+                    }
+                }
+            });
             
             child
         };
 
         let mut stdout = child.stdout.take().unwrap();
+        let buffer_size = self.audio_buffer_size;
         tokio::spawn(async move {
-            let mut buf = [0u8; 512]; // 2 bytes per sample for i16
+            let mut buf = vec![0u8; buffer_size]; // Use configurable buffer size
             loop {
                 match stdout.read(&mut buf).await {
                     Ok(0) => break,
