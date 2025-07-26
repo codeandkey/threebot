@@ -1,6 +1,7 @@
 use crate::error::Error;
 use std::path::Path;
 use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 /// Available audio effects that can be applied to sounds
 #[derive(Debug, Clone, PartialEq)]
@@ -225,17 +226,49 @@ impl PipelineBuilder {
                 PipelineStage::Ffmpeg { mut command } => {
                     // Log the exact command being executed
                     log::info!("Stage {}: Executing ffmpeg command: {:?}", i, command);
-                    command.spawn().map_err(|e| {
+                    let mut child = command.spawn().map_err(|e| {
                         log::error!("Failed to spawn ffmpeg process for stage {}: {}", i, e);
                         Error::IOError(e)
-                    })?
+                    })?;
+                    
+                    // Spawn task to read and log stderr
+                    if let Some(stderr) = child.stderr.take() {
+                        let stage_num = i;
+                        tokio::spawn(async move {
+                            let mut reader = tokio::io::BufReader::new(stderr);
+                            let mut line = String::new();
+                            while let Ok(n) = reader.read_line(&mut line).await {
+                                if n == 0 { break; }
+                                log::debug!("FFmpeg stage {} stderr: {}", stage_num, line.trim());
+                                line.clear();
+                            }
+                        });
+                    }
+                    
+                    child
                 }
                 PipelineStage::Sox { mut command } => {
                     log::info!("Stage {}: Executing sox command: {:?}", i, command);
-                    command.spawn().map_err(|e| {
+                    let mut child = command.spawn().map_err(|e| {
                         log::error!("Failed to spawn sox process for stage {}: {}", i, e);
                         Error::IOError(e)
-                    })?
+                    })?;
+                    
+                    // Spawn task to read and log stderr
+                    if let Some(stderr) = child.stderr.take() {
+                        let stage_num = i;
+                        tokio::spawn(async move {
+                            let mut reader = tokio::io::BufReader::new(stderr);
+                            let mut line = String::new();
+                            while let Ok(n) = reader.read_line(&mut line).await {
+                                if n == 0 { break; }
+                                log::debug!("Sox stage {} stderr: {}", stage_num, line.trim());
+                                line.clear();
+                            }
+                        });
+                    }
+                    
+                    child
                 }
             };
 

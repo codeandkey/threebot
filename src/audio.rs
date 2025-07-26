@@ -8,7 +8,7 @@ use std::{
 use log::trace;
 
 use tokio::{
-    io::AsyncReadExt,
+    io::{AsyncReadExt, AsyncBufReadExt},
     process::Command,
     sync::{Mutex, mpsc},
     time::{self, Duration},
@@ -254,7 +254,7 @@ impl AudioMixerControl {
         } else {
             log::info!("Using direct ffmpeg conversion (no effects)");
             // No effects, use original file directly
-            Command::new("ffmpeg")
+            let mut child = Command::new("ffmpeg")
                 .args([
                     "-i",
                     file,
@@ -270,8 +270,23 @@ impl AudioMixerControl {
                 ])
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()?
+                .stderr(Stdio::piped()) // Capture stderr instead of discarding
+                .spawn()?;
+            
+            // Log stderr in background task
+            if let Some(stderr) = child.stderr.take() {
+                tokio::spawn(async move {
+                    let mut reader = tokio::io::BufReader::new(stderr);
+                    let mut line = String::new();
+                    while let Ok(n) = reader.read_line(&mut line).await {
+                        if n == 0 { break; }
+                        log::debug!("FFmpeg direct conversion stderr: {}", line.trim());
+                        line.clear();
+                    }
+                });
+            }
+            
+            child
         };
 
         let mut stdout = child.stdout.take().unwrap();
