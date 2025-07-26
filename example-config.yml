@@ -32,6 +32,43 @@ behavior:
   allow_private_commands: true
   # Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
   volume: 1.0
+  # Enable volume normalization to maintain consistent loudness levels
+  volume_normalization_enabled: false
+  # Target loudness level for normalization (in LUFS, typically -23 to -16)
+  target_loudness_lufs: -18.0
+  # Maximum gain boost allowed during normalization (in dB, prevents over-amplification)
+  max_normalization_gain_db: 12.0
+  # Enable random audio effects when playing sounds
+  random_modifiers_enabled: true
+  # Probability (0.0-1.0) for each round of random modifier application (0.05 = 5% chance)
+  random_modifier_chance: 0.05
+  # Number of rounds to potentially apply random modifiers (2 = two 5% chances)
+  random_modifier_rounds: 2
+
+# Audio effect parameters
+audio_effects:
+  # Volume boost for 'loud' effect (in dB)
+  loud_boost_db: 6.0
+  # Speed multiplier for 'fast' effect
+  fast_speed_multiplier: 1.5
+  # Speed multiplier for 'slow' effect  
+  slow_speed_multiplier: 0.75
+  # Pitch shift for 'up' effect (in cents, 100 cents = 1 semitone)
+  pitch_up_cents: 200
+  # Pitch shift for 'down' effect (in cents, negative values lower pitch)
+  pitch_down_cents: -200
+  # Bass boost frequency for 'bass' effect (in Hz)
+  bass_boost_frequency_hz: 50
+  # Bass boost gain for 'bass' effect (in dB)
+  bass_boost_gain_db: 25.0
+  # Reverb room size (0.0-1.0, larger = more reverb)
+  reverb_room_size: 0.5
+  # Reverb damping (0.0-1.0, higher = less bright reverb)
+  reverb_damping: 0.5
+  # Echo delay time (in milliseconds)
+  echo_delay_ms: 300
+  # Echo feedback amount (0.0-1.0, higher = more repeats)
+  echo_feedback: 0.3
 
 # File and directory paths
 paths:

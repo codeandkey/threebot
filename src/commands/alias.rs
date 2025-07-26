@@ -108,8 +108,6 @@ impl Command for AliasCommand {
             self.create_alias(tools, alias_name, &author, &commands).await
         }
     }
-
-    fn name(&self) -> &str { "alias" }
     
     fn description(&self) -> &str {
         "Create or list command aliases. Usage: !alias <name> <commands...> or !alias list"
@@ -179,16 +177,18 @@ impl AliasCommand {
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
                         
                         let mut response = format!("📋 **Aliases** (Page {} of {})\n\n", page + 1, total_pages);
-                        response.push_str("<table>");
-                        response.push_str("<tr><th>Name</th><th>Author</th><th>Commands</th></tr>");
                         
-                        for alias in aliases {
-                            response.push_str(&format!(
-                                "<tr><td><strong>{}</strong></td><td>{}</td><td><code>{}</code></td></tr>",
-                                alias.name, alias.author, alias.commands
-                            ));
-                        }
-                        response.push_str("</table>");
+                        // Prepare table data
+                        let headers = &["Name", "Author", "Commands"];
+                        let rows: Vec<Vec<String>> = aliases.iter().map(|alias| {
+                            vec![
+                                format!("<strong>{}</strong>", alias.name),
+                                alias.author.clone(),
+                                format!("<code>{}</code>", alias.commands)
+                            ]
+                        }).collect();
+                        
+                        response.push_str(&tools.create_html_table(headers, &rows));
                         
                         if total_pages > 1 {
                             response.push_str(&format!("\n\nUse `!alias list <page>` to view other pages (1-{})", total_pages));
@@ -223,16 +223,18 @@ impl AliasCommand {
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
                         
                         let mut response = format!("🔍 **Aliases matching '{}'** (Page {} of {})\n\n", search_term, page + 1, total_pages);
-                        response.push_str("<table>");
-                        response.push_str("<tr><th>Name</th><th>Author</th><th>Commands</th></tr>");
                         
-                        for alias in aliases {
-                            response.push_str(&format!(
-                                "<tr><td><strong>{}</strong></td><td>{}</td><td><code>{}</code></td></tr>",
-                                alias.name, alias.author, alias.commands
-                            ));
-                        }
-                        response.push_str("</table>");
+                        // Prepare table data
+                        let headers = &["Name", "Author", "Commands"];
+                        let rows: Vec<Vec<String>> = aliases.iter().map(|alias| {
+                            vec![
+                                format!("<strong>{}</strong>", alias.name),
+                                alias.author.clone(),
+                                format!("<code>{}</code>", alias.commands)
+                            ]
+                        }).collect();
+                        
+                        response.push_str(&tools.create_html_table(headers, &rows));
                         
                         if total_pages > 1 {
                             response.push_str(&format!("\n\nUse `!alias search {} <page>` to view other pages (1-{})", search_term, total_pages));

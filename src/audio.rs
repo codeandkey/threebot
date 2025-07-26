@@ -16,10 +16,13 @@ use tokio::{
 
 use opus::Encoder;
 
-use crate::{session::OutgoingMessage, util};
+use crate::{session::OutgoingMessage, util, config::BehaviorSettings};
 use effects::{AudioEffectsProcessor, AudioEffect};
 
 pub mod effects;
+pub mod normalizer;
+
+use normalizer::VolumeNormalizer;
 
 const SAMPLE_RATE: usize = 48000;
 const CHANNELS: usize = 2;
@@ -54,11 +57,12 @@ pub struct AudioMixer {
     encoder: Encoder,
     seq: u32,
     volume: f32,
+    normalizer: Option<VolumeNormalizer>,
 }
 
 impl AudioMixer {
-    pub fn spawn(writer_sender: mpsc::Sender<OutgoingMessage>, volume: f32) -> AudioMixerTask {
-        let mut mixer = AudioMixer::new(writer_sender, volume);
+    pub fn spawn(writer_sender: mpsc::Sender<OutgoingMessage>, behavior_settings: &BehaviorSettings) -> AudioMixerTask {
+        let mut mixer = AudioMixer::new(writer_sender, behavior_settings);
         let streams = mixer.streams.clone();
 
         let task_handle = tokio::spawn(async move {
@@ -71,7 +75,17 @@ impl AudioMixer {
         }
     }
 
-    pub fn new(writer_sender: mpsc::Sender<OutgoingMessage>, volume: f32) -> Self {
+    pub fn new(writer_sender: mpsc::Sender<OutgoingMessage>, behavior_settings: &BehaviorSettings) -> Self {
+        let normalizer = if behavior_settings.volume_normalization_enabled {
+            Some(VolumeNormalizer::new(
+                behavior_settings.target_loudness_lufs,
+                behavior_settings.max_normalization_gain_db,
+                SAMPLE_RATE,
+            ))
+        } else {
+            None
+        };
+
         let mixer = AudioMixer {
             streams: Arc::new(Mutex::new(Vec::new())),
             writer_sender,
@@ -82,7 +96,8 @@ impl AudioMixer {
             )
             .unwrap(),
             seq: 0,
-            volume,
+            volume: behavior_settings.volume,
+            normalizer,
         };
 
         mixer
@@ -132,6 +147,11 @@ impl AudioMixer {
             // If no active streams, don't bother encoding
             if active == 0 {
                 continue;
+            }
+
+            // Apply volume normalization if enabled
+            if let Some(ref mut normalizer) = self.normalizer {
+                normalizer.process(&mut mixed);
             }
 
             // Apply global volume multiplier to the mixed audio

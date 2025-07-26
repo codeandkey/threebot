@@ -10,6 +10,8 @@ pub struct BotConfig {
     pub server: ServerSettings,
     /// Audio and behavior settings
     pub behavior: BehaviorSettings,
+    /// Audio effect parameters
+    pub audio_effects: AudioEffectSettings,
     /// Paths and directories
     pub paths: PathSettings,
 }
@@ -44,6 +46,44 @@ pub struct BehaviorSettings {
     pub allow_private_commands: bool,
     /// Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
     pub volume: f32,
+    /// Enable volume normalization to maintain consistent loudness levels
+    pub volume_normalization_enabled: bool,
+    /// Target loudness level for normalization (in LUFS, typically -23 to -16)
+    pub target_loudness_lufs: f32,
+    /// Maximum gain boost allowed during normalization (in dB, prevents over-amplification)
+    pub max_normalization_gain_db: f32,
+    /// Enable random modifiers when playing sounds
+    pub random_modifiers_enabled: bool,
+    /// Probability (0.0-1.0) for each round of random modifier application
+    pub random_modifier_chance: f32,
+    /// Number of rounds to potentially apply random modifiers
+    pub random_modifier_rounds: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioEffectSettings {
+    /// Volume boost for 'loud' effect (in dB)
+    pub loud_boost_db: f32,
+    /// Speed multiplier for 'fast' effect
+    pub fast_speed_multiplier: f32,
+    /// Speed multiplier for 'slow' effect
+    pub slow_speed_multiplier: f32,
+    /// Pitch shift for 'up' effect (in cents, 100 cents = 1 semitone)
+    pub pitch_up_cents: i32,
+    /// Pitch shift for 'down' effect (in cents, negative values lower pitch)
+    pub pitch_down_cents: i32,
+    /// Bass boost frequency for 'bass' effect (in Hz)
+    pub bass_boost_frequency_hz: f32,
+    /// Bass boost gain for 'bass' effect (in dB)
+    pub bass_boost_gain_db: f32,
+    /// Reverb room size (0.0-1.0, larger = more reverb)
+    pub reverb_room_size: f32,
+    /// Reverb damping (0.0-1.0, higher = less bright reverb)
+    pub reverb_damping: f32,
+    /// Echo delay time (in milliseconds)
+    pub echo_delay_ms: u32,
+    /// Echo feedback amount (0.0-1.0, higher = more repeats)
+    pub echo_feedback: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +138,25 @@ impl Default for BotConfig {
                 auto_farewells: FarewellMode::Custom,
                 allow_private_commands: true,
                 volume: 1.0,
+                volume_normalization_enabled: false,
+                target_loudness_lufs: -18.0, // Good balance for voice chat
+                max_normalization_gain_db: 12.0, // Prevent excessive amplification
+                random_modifiers_enabled: true,
+                random_modifier_chance: 0.05, // 5% chance per round
+                random_modifier_rounds: 2,
+            },
+            audio_effects: AudioEffectSettings {
+                loud_boost_db: 6.0,
+                fast_speed_multiplier: 1.5,
+                slow_speed_multiplier: 0.75,
+                pitch_up_cents: 200,
+                pitch_down_cents: -200,
+                bass_boost_frequency_hz: 50.0,
+                bass_boost_gain_db: 25.0,
+                reverb_room_size: 0.5,
+                reverb_damping: 0.5,
+                echo_delay_ms: 300,
+                echo_feedback: 0.3,
             },
             paths: PathSettings {
                 data_dir: None,
@@ -174,6 +233,43 @@ behavior:
   allow_private_commands: true
   # Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
   volume: 1.0
+  # Enable volume normalization to maintain consistent loudness levels
+  volume_normalization_enabled: false
+  # Target loudness level for normalization (in LUFS, typically -23 to -16)
+  target_loudness_lufs: -18.0
+  # Maximum gain boost allowed during normalization (in dB, prevents over-amplification)
+  max_normalization_gain_db: 12.0
+  # Enable random audio effects when playing sounds
+  random_modifiers_enabled: true
+  # Probability (0.0-1.0) for each round of random modifier application (0.05 = 5% chance)
+  random_modifier_chance: 0.05
+  # Number of rounds to potentially apply random modifiers (2 = two 5% chances)
+  random_modifier_rounds: 2
+
+# Audio effect parameters
+audio_effects:
+  # Volume boost for 'loud' effect (in dB)
+  loud_boost_db: 6.0
+  # Speed multiplier for 'fast' effect
+  fast_speed_multiplier: 1.5
+  # Speed multiplier for 'slow' effect  
+  slow_speed_multiplier: 0.75
+  # Pitch shift for 'up' effect (in cents, 100 cents = 1 semitone)
+  pitch_up_cents: 200
+  # Pitch shift for 'down' effect (in cents, negative values lower pitch)
+  pitch_down_cents: -200
+  # Bass boost frequency for 'bass' effect (in Hz)
+  bass_boost_frequency_hz: 50.0
+  # Bass boost gain for 'bass' effect (in dB)
+  bass_boost_gain_db: 25.0
+  # Reverb room size (0.0-1.0, larger = more reverb)
+  reverb_room_size: 0.5
+  # Reverb damping (0.0-1.0, higher = less bright reverb)
+  reverb_damping: 0.5
+  # Echo delay time (in milliseconds)
+  echo_delay_ms: 300
+  # Echo feedback amount (0.0-1.0, higher = more repeats)
+  echo_feedback: 0.3
 
 # File and directory paths
 paths:

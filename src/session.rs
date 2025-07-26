@@ -1,7 +1,7 @@
 use crate::{
     audio::{AudioMixer, AudioMixerTask}, 
     commands::{SessionTools, CommandContext, Executor}, 
-    config::{BehaviorSettings, GreetingMode, FarewellMode},
+    config::{BehaviorSettings, AudioEffectSettings, GreetingMode, FarewellMode},
     error::Error, 
     protos::{self, generated::Mumble::CryptSetup}
 };
@@ -76,6 +76,7 @@ pub struct ConnectionOptions {
     pub timeout: Option<u64>,
     pub data_dir: Option<String>,
     pub behavior_settings: BehaviorSettings,
+    pub audio_effects: AudioEffectSettings,
 }
 
 pub enum OutgoingMessage {
@@ -207,6 +208,7 @@ pub struct Session {
     alias_manager: Option<Arc<crate::alias::AliasManager>>,
     user_settings_manager: Option<Arc<crate::user_settings::UserSettingsManager>>,
     behavior_settings: BehaviorSettings,
+    audio_effects: AudioEffectSettings,
 }
 
 impl Session {
@@ -358,7 +360,7 @@ impl Session {
 
         info!("Sent authenticate message to server");
 
-        let audio_mixer = AudioMixer::spawn(writer_task.sender.clone(), options.behavior_settings.volume);
+        let audio_mixer = AudioMixer::spawn(writer_task.sender.clone(), &options.behavior_settings);
 
         // Initialize database manager
         let database_manager = match crate::database::DatabaseManager::new(&database_path).await {
@@ -413,6 +415,7 @@ impl Session {
             alias_manager,
             user_settings_manager,
             behavior_settings: options.behavior_settings,
+            audio_effects: options.audio_effects,
         })
     }
 
@@ -1047,6 +1050,14 @@ impl SessionTools for Session {
 
     async fn execute_command(&self, command: &str, context: &CommandContext) -> Result<(), Error> {
         self.command_executor.execute(command, self, context.clone()).await
+    }
+
+    fn behavior_settings(&self) -> &crate::config::BehaviorSettings {
+        &self.behavior_settings
+    }
+
+    fn audio_effect_settings(&self) -> &crate::config::AudioEffectSettings {
+        &self.audio_effects
     }
 }
 

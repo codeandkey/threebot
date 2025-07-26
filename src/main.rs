@@ -121,6 +121,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         timeout: Some(config.server.timeout_seconds),
         data_dir: Some(data_dir.to_string_lossy().to_string()),
         behavior_settings: config.behavior,
+        audio_effects: config.audio_effects,
     })
     .await?;
 

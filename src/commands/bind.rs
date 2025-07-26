@@ -83,9 +83,6 @@ impl Command for BindCommand {
         Ok(())
     }
 
-    fn name(&self) -> &str {
-        "bind"
-    }
     
     fn description(&self) -> &str {
         "Set or execute personal bind commands - !bind <command> to set, !bind to execute"

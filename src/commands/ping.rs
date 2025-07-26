@@ -9,8 +9,6 @@ impl Command for PingCommand {
         tools.reply("Pong!").await?;
         Ok(())
     }
-
-    fn name(&self) -> &str { "ping" }
     
     fn description(&self) -> &str {
         "Responds with 'Pong!' to test command functionality"

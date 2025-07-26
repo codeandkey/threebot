@@ -93,6 +93,18 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
     async fn execute_command(&self, command: &str, context: &CommandContext) -> Result<(), Error> {
         self.tools.execute_command(command, context).await
     }
+    
+    fn behavior_settings(&self) -> &crate::config::BehaviorSettings {
+        self.tools.behavior_settings()
+    }
+    
+    fn audio_effect_settings(&self) -> &crate::config::AudioEffectSettings {
+        self.tools.audio_effect_settings()
+    }
+    
+    fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {
+        self.tools.create_html_table(headers, rows)
+    }
 }
 
 /// Context and tools available to commands for interacting with the session
@@ -145,6 +157,42 @@ pub trait SessionTools: Send + Sync {
     
     /// Execute a command string
     async fn execute_command(&self, command: &str, context: &CommandContext) -> Result<(), Error>;
+    
+    /// Get the current behavior settings
+    fn behavior_settings(&self) -> &crate::config::BehaviorSettings;
+    
+    /// Get the current audio effect settings
+    fn audio_effect_settings(&self) -> &crate::config::AudioEffectSettings;
+    
+    /// Creates an HTML table with no borders, bold centered headers, and standard text rows
+    fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {
+        let mut table = String::from("<table style=\"border-collapse: collapse; width: 100%; border: none;\">");
+        
+        // Add header row
+        table.push_str("<tr>");
+        for header in headers {
+            table.push_str(&format!(
+                "<th style=\"text-align: center; font-weight: bold; padding: 0 8px; border: none;\">{}</th>",
+                header
+            ));
+        }
+        table.push_str("</tr>");
+        
+        // Add data rows
+        for row in rows {
+            table.push_str("<tr>");
+            for cell in row {
+                table.push_str(&format!(
+                    "<td style=\"text-align: left; padding: 0 8px; border: none;\">{}</td>",
+                    cell
+                ));
+            }
+            table.push_str("</tr>");
+        }
+        
+        table.push_str("</table>");
+        table
+    }
 }
 
 /// Command execution context
@@ -161,8 +209,6 @@ pub struct CommandContext {
 #[async_trait::async_trait]
 pub trait Command: Send + Sync {
     async fn execute(&mut self, tools: &dyn SessionTools, context: CommandContext, args: Vec<String>) -> Result<(), Error>;
-    fn names(&self) -> Vec<&str> { vec![self.name()] }
-    fn name(&self) -> &str;
     fn description(&self) -> &str { "No description available" }
 }
 
@@ -185,13 +231,15 @@ const MAX_ALIAS_DEPTH: u32 = 10; // Maximum alias expansion depth
 impl Executor {
     pub fn new() -> Self {
         let mut commands = HashMap::new();
-        for command in all_commands() {
-            let names = command.names().iter().cloned().map(Into::into).collect::<Vec<String>>();
-            let state = Arc::new(Mutex::new(command));
-            for name in &names {
-                commands.insert(name.to_string(), state.clone());
-            }
-        }
+        
+        // Manually register commands with their inferred names from filenames
+        commands.insert("alias".to_string(), Arc::new(Mutex::new(Box::new(alias::AliasCommand::default()) as Box<dyn Command>)));
+        commands.insert("bind".to_string(), Arc::new(Mutex::new(Box::new(bind::BindCommand::default()) as Box<dyn Command>)));
+        commands.insert("farewell".to_string(), Arc::new(Mutex::new(Box::new(farewell::FarewellCommand::default()) as Box<dyn Command>)));
+        commands.insert("greeting".to_string(), Arc::new(Mutex::new(Box::new(greeting::GreetingCommand::default()) as Box<dyn Command>)));
+        commands.insert("ping".to_string(), Arc::new(Mutex::new(Box::new(ping::PingCommand::default()) as Box<dyn Command>)));
+        commands.insert("sound".to_string(), Arc::new(Mutex::new(Box::new(sound::SoundCommand::default()) as Box<dyn Command>)));
+        
         Executor { 
             commands,
         }

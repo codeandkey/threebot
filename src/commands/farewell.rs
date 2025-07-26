@@ -74,10 +74,6 @@ impl Command for FarewellCommand {
 
         Ok(())
     }
-
-    fn name(&self) -> &str {
-        "farewell"
-    }
     
     fn description(&self) -> &str {
         "Set or remove personal farewell commands - !farewell <command> to set, !farewell to remove"
