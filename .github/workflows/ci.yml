@@ -32,7 +32,7 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: ${{ matrix.rust }}
+        toolchain: ${{ matrix.rust == 'stable' && '1.85' || matrix.rust }}
         components: rustfmt, clippy
 
     - name: Install system dependencies (Ubuntu)
@@ -85,6 +85,8 @@ jobs:
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: "1.85"
 
     - name: Install cargo-audit
       run: cargo install cargo-audit
@@ -128,7 +130,9 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
+        toolchain: "1.85"
         targets: ${{ matrix.target }}
+        components: rustfmt, clippy
 
     - name: Install system dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
