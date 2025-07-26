@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     cmake \
+    build-essential \
+    libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -28,6 +30,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     ffmpeg \
+    sox \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
