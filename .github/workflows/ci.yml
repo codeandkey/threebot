@@ -96,7 +96,7 @@ jobs:
   build-release:
     name: Build Release Binaries
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     strategy:
       matrix:
         include:
@@ -187,7 +187,7 @@ jobs:
   docker:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
