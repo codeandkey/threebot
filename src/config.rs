@@ -317,6 +317,15 @@ audio_effects:
   echo_delay_ms: 300
   # Echo feedback amount (0.0-1.0, higher = more repeats)
   echo_feedback: 0.3
+  # Low-pass filter cutoff frequency for 'muffle' effect (in Hz)
+  muffle_cutoff_frequency_hz: 1000
+
+# External tools configuration
+external_tools:
+  # Path to cookies file for yt-dlp (supports ~ for home directory)
+  # Example: "~/cookies.txt" or "/path/to/cookies.txt"
+  # If null, no cookies will be passed to yt-dlp
+  ytdlp_cookies_file: null
 
 # File and directory paths
 paths:
