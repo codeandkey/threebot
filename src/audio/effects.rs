@@ -6,14 +6,16 @@ use tokio::io::AsyncBufReadExt;
 /// Available audio effects that can be applied to sounds
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioEffect {
-    Loud,   // Increase volume
-    Fast,   // Increase speed/tempo
-    Slow,   // Decrease speed/tempo
-    Reverb, // Add reverb effect
-    Echo,   // Add echo effect
-    Up,     // Pitch up
-    Down,   // Pitch down
-    Bass,   // Bass boost
+    Loud,    // Increase volume
+    Fast,    // Increase speed/tempo
+    Slow,    // Decrease speed/tempo
+    Reverb,  // Add reverb effect
+    Echo,    // Add echo effect
+    Up,      // Pitch up
+    Down,    // Pitch down
+    Bass,    // Bass boost
+    Reverse, // Play audio backwards
+    Muffle,  // Apply low-pass filter
 }
 
 impl AudioEffect {
@@ -28,6 +30,8 @@ impl AudioEffect {
             "up" => Some(AudioEffect::Up),
             "down" => Some(AudioEffect::Down),
             "bass" => Some(AudioEffect::Bass),
+            "reverse" => Some(AudioEffect::Reverse),
+            "muffle" => Some(AudioEffect::Muffle),
             _ => None,
         }
     }
@@ -43,6 +47,8 @@ impl AudioEffect {
             AudioEffect::Up => format!("Pitch up (+{} cents)", config.pitch_up_cents),
             AudioEffect::Down => format!("Pitch down ({} cents)", config.pitch_down_cents),
             AudioEffect::Bass => format!("Bass boost (+{}dB at {}Hz)", config.bass_boost_gain_db, config.bass_boost_frequency_hz),
+            AudioEffect::Reverse => "Play audio backwards".to_string(),
+            AudioEffect::Muffle => format!("Apply low-pass filter (cutoff: {}Hz)", config.muffle_cutoff_frequency_hz),
         }
     }
 
@@ -68,6 +74,8 @@ impl AudioEffect {
                 config.bass_boost_frequency_hz, 
                 config.bass_boost_frequency_hz, 
                 config.bass_boost_gain_db),
+            AudioEffect::Reverse => "areverse".to_string(),
+            AudioEffect::Muffle => format!("lowpass=f={}", config.muffle_cutoff_frequency_hz),
         }
     }
 
@@ -494,7 +502,7 @@ pub fn parse_effects(effect_strings: &[String]) -> Result<Vec<AudioEffect>, Erro
 
     if !unknown_effects.is_empty() {
         return Err(Error::InvalidInput(format!(
-            "Unknown effects: {}. Available effects: loud, fast, slow, reverb, echo, up, down, bass",
+            "Unknown effects: {}. Available effects: loud, fast, slow, reverb, echo, up, down, bass, reverse, muffle",
             unknown_effects.join(", ")
         )));
     }
@@ -513,6 +521,10 @@ mod tests {
         assert_eq!(AudioEffect::from_str("Reverb"), Some(AudioEffect::Reverb));
         assert_eq!(AudioEffect::from_str("bass"), Some(AudioEffect::Bass));
         assert_eq!(AudioEffect::from_str("BASS"), Some(AudioEffect::Bass));
+        assert_eq!(AudioEffect::from_str("reverse"), Some(AudioEffect::Reverse));
+        assert_eq!(AudioEffect::from_str("REVERSE"), Some(AudioEffect::Reverse));
+        assert_eq!(AudioEffect::from_str("muffle"), Some(AudioEffect::Muffle));
+        assert_eq!(AudioEffect::from_str("MUFFLE"), Some(AudioEffect::Muffle));
         assert_eq!(AudioEffect::from_str("invalid"), None);
     }
 
@@ -572,6 +584,7 @@ mod tests {
             reverb_damping: 0.5,
             echo_delay_ms: 300,
             echo_feedback: 0.3,
+            muffle_cutoff_frequency_hz: 1000.0,
         };
         let _processor = AudioEffectsProcessor::new(config).unwrap();
 
@@ -620,6 +633,7 @@ mod tests {
             reverb_damping: 0.5,
             echo_delay_ms: 300,
             echo_feedback: 0.3,
+            muffle_cutoff_frequency_hz: 1000.0,
         };
         
         assert_eq!(AudioEffect::Loud.to_ffmpeg_filter(&config), "volume=6dB");
@@ -640,6 +654,14 @@ mod tests {
         assert_eq!(
             AudioEffect::Bass.to_ffmpeg_filter(&config),
             "equalizer=f=50:width_type=h:width=50:g=25"
+        );
+        assert_eq!(
+            AudioEffect::Reverse.to_ffmpeg_filter(&config),
+            "areverse"
+        );
+        assert_eq!(
+            AudioEffect::Muffle.to_ffmpeg_filter(&config),
+            "lowpass=f=1000"
         );
 
         // Test filter chain construction

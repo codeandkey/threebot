@@ -14,6 +14,8 @@ pub struct BotConfig {
     pub audio_effects: AudioEffectSettings,
     /// Paths and directories
     pub paths: PathSettings,
+    /// External tools configuration
+    pub external_tools: ExternalToolsSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +88,8 @@ pub struct AudioEffectSettings {
     pub echo_delay_ms: u32,
     /// Echo feedback amount (0.0-1.0, higher = more repeats)
     pub echo_feedback: f32,
+    /// Low-pass filter cutoff frequency for 'muffle' effect (in Hz)
+    pub muffle_cutoff_frequency_hz: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +124,35 @@ pub struct PathSettings {
     pub key_file: Option<String>,
     /// Directory containing trusted certificates for server verification
     pub trusted_certs_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalToolsSettings {
+    /// Path to cookies file for yt-dlp (for authentication and age-restricted content)
+    pub ytdlp_cookies_file: Option<String>,
+}
+
+impl ExternalToolsSettings {
+    /// Get the expanded path for the yt-dlp cookies file, handling tilde expansion
+    pub fn get_ytdlp_cookies_path(&self) -> Option<PathBuf> {
+        self.ytdlp_cookies_file.as_ref().map(|path| {
+            if path.starts_with("~/") {
+                // Expand tilde to home directory
+                if let Some(home_dir) = dirs::home_dir() {
+                    home_dir.join(&path[2..]) // Skip the "~/" part
+                } else {
+                    // Fallback if home directory can't be determined
+                    PathBuf::from(path)
+                }
+            } else if path == "~" {
+                // Handle case where path is just "~"
+                dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+            } else {
+                // Path doesn't start with tilde, use as-is
+                PathBuf::from(path)
+            }
+        })
+    }
 }
 
 impl Default for BotConfig {
@@ -160,12 +193,16 @@ impl Default for BotConfig {
                 reverb_damping: 1.0,    // Was 0.5, now 1.0 to match "100" parameter
                 echo_delay_ms: 300,
                 echo_feedback: 0.3,
+                muffle_cutoff_frequency_hz: 1000.0, // Default cutoff frequency for low-pass filter
             },
             paths: PathSettings {
                 data_dir: None,
                 cert_file: None,
                 key_file: None,
                 trusted_certs_dir: None,
+            },
+            external_tools: ExternalToolsSettings {
+                ytdlp_cookies_file: None,
             },
         }
     }
@@ -292,6 +329,12 @@ paths:
   key_file: null
   # Directory for trusted server certificates (if null, uses data_dir/trusted_certificates)
   trusted_certs_dir: null
+
+# External tools configuration
+external_tools:
+  # Path to cookies file for yt-dlp (for authentication and age-restricted content)
+  # Example: "/path/to/cookies.txt" or "~/.config/yt-dlp/cookies.txt"
+  ytdlp_cookies_file: null
 "#.to_string()
     }
 
@@ -439,5 +482,32 @@ mod tests {
 
         assert!(config.bot.verbose);
         assert_eq!(config.paths.data_dir, Some("/custom/path".to_string()));
+    }
+
+    #[test]
+    fn test_tilde_expansion() {
+        let mut external_tools = ExternalToolsSettings {
+            ytdlp_cookies_file: Some("~/cookies.txt".to_string()),
+        };
+
+        let expanded_path = external_tools.get_ytdlp_cookies_path().unwrap();
+        assert!(expanded_path.ends_with("cookies.txt"));
+        assert!(!expanded_path.to_string_lossy().starts_with("~"));
+
+        // Test absolute path (no expansion)
+        external_tools.ytdlp_cookies_file = Some("/absolute/path/cookies.txt".to_string());
+        let absolute_path = external_tools.get_ytdlp_cookies_path().unwrap();
+        assert_eq!(absolute_path, PathBuf::from("/absolute/path/cookies.txt"));
+
+        // Test just tilde
+        external_tools.ytdlp_cookies_file = Some("~".to_string());
+        let home_path = external_tools.get_ytdlp_cookies_path().unwrap();
+        if let Some(expected_home) = dirs::home_dir() {
+            assert_eq!(home_path, expected_home);
+        }
+
+        // Test None
+        external_tools.ytdlp_cookies_file = None;
+        assert!(external_tools.get_ytdlp_cookies_path().is_none());
     }
 }

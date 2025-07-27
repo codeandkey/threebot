@@ -9,7 +9,7 @@ impl SoundCommand {
         let effect_name = arg.strip_prefix('+').unwrap_or(arg);
         matches!(
             effect_name,
-            "loud" | "fast" | "slow" | "reverb" | "echo" | "up" | "down" | "bass"
+            "loud" | "fast" | "slow" | "reverb" | "echo" | "up" | "down" | "bass" | "reverse" | "muffle"
         )
     }
 
@@ -39,6 +39,8 @@ impl SoundCommand {
             crate::audio::effects::AudioEffect::Up,
             crate::audio::effects::AudioEffect::Down,
             crate::audio::effects::AudioEffect::Bass,
+            crate::audio::effects::AudioEffect::Reverse,
+            crate::audio::effects::AudioEffect::Muffle,
         ];
 
         // Apply random modifiers for the configured number of rounds
@@ -131,17 +133,24 @@ impl SoundCommand {
         fs::create_dir_all(&temp_dir)
             .await
             .map_err(|e| crate::error::Error::IOError(e))?;
-
         // Download audio using yt-dlp
         let temp_audio_path = temp_dir.join("downloaded_audio.%(ext)s");
-        let yt_dlp_output = Command::new("yt-dlp")
+        let mut yt_dlp_cmd = Command::new("yt-dlp");
+        yt_dlp_cmd
             .arg("--extract-audio")
             .arg("--audio-format")
             .arg("mp3")
             .arg("--audio-quality")
             .arg("0") // Best quality
             .arg("-o")
-            .arg(&temp_audio_path)
+            .arg(&temp_audio_path);
+
+        // Add cookies file if configured
+        if let Some(cookies_path) = tools.external_tools_settings().get_ytdlp_cookies_path() {
+            yt_dlp_cmd.arg("--cookies").arg(cookies_path);
+        }
+
+        let yt_dlp_output = yt_dlp_cmd
             .arg(url)
             .output()
             .map_err(|e| crate::error::Error::IOError(e))?;
@@ -336,14 +345,17 @@ impl Command for SoundCommand {
                 • `echo` - Add echo effect\n\
                 • `up` - Pitch up (+200 cents)\n\
                 • `down` - Pitch down (-200 cents)\n\
-                • `bass` - Bass boost (+25dB at 50Hz)\n\n\
+                • `bass` - Bass boost (+25dB at 50Hz)\n\
+                • `reverse` - Play audio backwards\n\
+                • `muffle` - Apply low-pass filter (1000Hz cutoff)\n\n\
                 **Random Effects:**\n\
                 • When no specific sound is provided, random effects may be applied based on server configuration\n\
                 • Configure via `random_modifiers_enabled`, `random_modifier_chance`, and `random_modifier_rounds` in config.yml\n\n\
                 **Pull Command Details:**\n\
                 • `<URL>` - YouTube, Twitter, or other supported video/audio URL\n\
                 • `<start>` - Start time (e.g., '30', '1:30', '1:23:45')\n\
-                • `<length>` - Duration in seconds (e.g., '5', '10.5')\n\n\
+                • `<length>` - Duration in seconds (e.g., '5', '10.5')\n\
+                • For age-restricted or private content, configure `ytdlp_cookies_file` in config.yml\n\n\
                 **Examples:**\n\
                 • `!sound play` - Play random sound (may have random effects)\n\
                 • `!sound play +reverb` - Play random sound with reverb\n\

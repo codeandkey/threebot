@@ -129,6 +129,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         data_dir: Some(data_dir.to_string_lossy().to_string()),
         behavior_settings: config.behavior,
         audio_effects: config.audio_effects,
+        external_tools: config.external_tools,
     })
     .await?;
 

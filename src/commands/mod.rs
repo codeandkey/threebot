@@ -113,6 +113,10 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
         self.tools.audio_effect_settings()
     }
 
+    fn external_tools_settings(&self) -> &crate::config::ExternalToolsSettings {
+        self.tools.external_tools_settings()
+    }
+
     fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {
         self.tools.create_html_table(headers, rows)
     }
@@ -181,6 +185,9 @@ pub trait SessionTools: Send + Sync {
 
     /// Get the current audio effect settings
     fn audio_effect_settings(&self) -> &crate::config::AudioEffectSettings;
+
+    /// Get the current external tools settings
+    fn external_tools_settings(&self) -> &crate::config::ExternalToolsSettings;
 
     /// Creates an HTML table with no borders, bold centered headers, and standard text rows
     fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {

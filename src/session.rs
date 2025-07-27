@@ -1,7 +1,7 @@
 use crate::{
     audio::{AudioMixer, AudioMixerTask},
     commands::{CommandContext, Executor, SessionTools},
-    config::{AudioEffectSettings, BehaviorSettings, FarewellMode, GreetingMode},
+    config::{AudioEffectSettings, BehaviorSettings, ExternalToolsSettings, FarewellMode, GreetingMode},
     error::Error,
     protos::{self, generated::Mumble::CryptSetup},
 };
@@ -77,6 +77,7 @@ pub struct ConnectionOptions {
     pub data_dir: Option<String>,
     pub behavior_settings: BehaviorSettings,
     pub audio_effects: AudioEffectSettings,
+    pub external_tools: ExternalToolsSettings,
 }
 
 pub enum OutgoingMessage {
@@ -203,6 +204,7 @@ pub struct Session {
     user_settings_manager: Option<Arc<crate::user_settings::UserSettingsManager>>,
     behavior_settings: BehaviorSettings,
     audio_effects: AudioEffectSettings,
+    external_tools: ExternalToolsSettings,
 }
 
 impl Session {
@@ -425,6 +427,7 @@ impl Session {
             user_settings_manager,
             behavior_settings: options.behavior_settings,
             audio_effects: options.audio_effects,
+            external_tools: options.external_tools,
         })
     }
 
@@ -1182,6 +1185,10 @@ impl SessionTools for Session {
 
     fn audio_effect_settings(&self) -> &crate::config::AudioEffectSettings {
         &self.audio_effects
+    }
+
+    fn external_tools_settings(&self) -> &crate::config::ExternalToolsSettings {
+        &self.external_tools
     }
 }
 
