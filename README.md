@@ -227,8 +227,14 @@ cargo build --release
 # Run tests
 cargo test
 
-# Run with development logging
+# Run with development logging (includes timestamps)
 RUST_LOG=debug cargo run
+
+# Enable SQL query logging (disabled by default)
+RUST_LOG=debug,sea_orm::query=debug,sqlx=debug cargo run
+
+# Custom logging levels for different components
+RUST_LOG=info,bigbot::session=debug,bigbot::commands=trace cargo run
 ```
 
 ### Adding Commands
