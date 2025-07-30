@@ -30,6 +30,19 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
         self.tools.play_sound_with_effects(file_path, effects).await
     }
 
+    async fn play_sound_with_code(&self, file_path: &str, sound_code: &str) -> Result<(), Error> {
+        self.tools.play_sound_with_code(file_path, sound_code).await
+    }
+
+    async fn play_sound_with_effects_and_code(
+        &self,
+        file_path: &str,
+        effects: &[crate::audio::effects::AudioEffect],
+        sound_code: &str,
+    ) -> Result<(), Error> {
+        self.tools.play_sound_with_effects_and_code(file_path, effects, sound_code).await
+    }
+
     async fn stop_all_streams(&self) -> Result<(), Error> {
         self.tools.stop_all_streams().await
     }
@@ -117,6 +130,14 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
         self.tools.external_tools_settings()
     }
 
+    fn record_sound_played(&self, sound_code: &str) {
+        self.tools.record_sound_played(sound_code)
+    }
+
+    fn get_sound_history(&self, limit: usize) -> Vec<(String, chrono::DateTime<chrono::Utc>)> {
+        self.tools.get_sound_history(limit)
+    }
+
     fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {
         self.tools.create_html_table(headers, rows)
     }
@@ -133,6 +154,17 @@ pub trait SessionTools: Send + Sync {
         &self,
         file_path: &str,
         effects: &[crate::audio::effects::AudioEffect],
+    ) -> Result<(), Error>;
+
+    /// Play an audio file and record it in history
+    async fn play_sound_with_code(&self, file_path: &str, sound_code: &str) -> Result<(), Error>;
+
+    /// Play an audio file with effects and record it in history
+    async fn play_sound_with_effects_and_code(
+        &self,
+        file_path: &str,
+        effects: &[crate::audio::effects::AudioEffect],
+        sound_code: &str,
     ) -> Result<(), Error>;
 
     /// Stop all currently playing audio streams
@@ -189,6 +221,12 @@ pub trait SessionTools: Send + Sync {
     /// Get the current external tools settings
     fn external_tools_settings(&self) -> &crate::config::ExternalToolsSettings;
 
+    /// Record a sound being played for history tracking
+    fn record_sound_played(&self, sound_code: &str);
+
+    /// Get the recently played sounds (up to limit, most recent first)
+    fn get_sound_history(&self, limit: usize) -> Vec<(String, chrono::DateTime<chrono::Utc>)>;
+
     /// Creates an HTML table with no borders, bold centered headers, and standard text rows
     fn create_html_table(&self, headers: &[&str], rows: &[Vec<String>]) -> String {
         let mut table =
@@ -217,6 +255,88 @@ pub trait SessionTools: Send + Sync {
         }
 
         table.push_str("</table>");
+        table
+    }
+
+    /// Creates an HTML table with pagination support
+    fn create_html_table_paginated(
+        &self,
+        headers: &[&str],
+        rows: &[Vec<String>],
+        page: Option<usize>,
+        per_page: Option<usize>,
+        total_count: Option<usize>,
+        command_prefix: &str,
+    ) -> String {
+        let per_page = per_page.unwrap_or(30); // Default to 30 rows per page
+        let page = page.unwrap_or(1); // Default to page 1
+        
+        // Calculate pagination
+        let start_idx = (page - 1) * per_page;
+        let end_idx = std::cmp::min(start_idx + per_page, rows.len());
+        let paginated_rows = if start_idx < rows.len() {
+            &rows[start_idx..end_idx]
+        } else {
+            &[]
+        };
+        
+        // Build table HTML
+        let mut table = String::from("<table style=\"border-collapse: collapse; width: 100%; border: none;\">");
+        
+        // Add header row
+        table.push_str("<tr>");
+        for header in headers {
+            table.push_str(&format!(
+                "<th style=\"text-align: center; font-weight: bold; padding: 0 8px; border: none;\">{}</th>",
+                header
+            ));
+        }
+        table.push_str("</tr>");
+        
+        // Add data rows
+        for row in paginated_rows {
+            table.push_str("<tr>");
+            for cell in row {
+                table.push_str(&format!(
+                    "<td style=\"text-align: left; padding: 0 8px; border: none;\">{}</td>",
+                    cell
+                ));
+            }
+            table.push_str("</tr>");
+        }
+        
+        table.push_str("</table>");
+        
+        // Add pagination info
+        let actual_total = total_count.unwrap_or(rows.len());
+        if actual_total > per_page {
+            let total_pages = (actual_total + per_page - 1) / per_page; // Ceiling division
+            let showing_start = start_idx + 1;
+            let showing_end = std::cmp::min(start_idx + paginated_rows.len(), actual_total);
+            
+            table.push_str(&format!(
+                "<div style=\"margin-top: 10px; font-style: italic; color: #666; text-align: center;\">Showing {} - {} of {} total (Page {} of {})</div>",
+                showing_start, showing_end, actual_total, page, total_pages
+            ));
+
+            // Add navigation hints if there are multiple pages
+            if total_pages > 1 {
+                let mut nav_hints = Vec::new();
+                if page > 1 {
+                    nav_hints.push(format!("Previous: `{} {}`", command_prefix, page - 1));
+                }
+                if page < total_pages {
+                    nav_hints.push(format!("Next: `{} {}`", command_prefix, page + 1));
+                }
+                if !nav_hints.is_empty() {
+                    table.push_str(&format!(
+                        "<div style=\"margin-top: 5px; font-size: 0.9em; color: #888; text-align: center;\">{}</div>",
+                        nav_hints.join(" | ")
+                    ));
+                }
+            }
+        }
+        
         table
     }
 }
@@ -460,6 +580,19 @@ impl Executor {
                 expanded_commands = expanded_commands.replace(&placeholder, arg);
                 performed_substitution = true;
             }
+        }
+
+        // Replace $recent with most recently played sound code
+        if expanded_commands.contains("$recent") {
+            let recent_sounds = tools.get_sound_history(1);
+            if recent_sounds.is_empty() {
+                return Err(Error::InvalidArgument(
+                    "Cannot use $recent: no sounds have been played yet".to_string()
+                ));
+            }
+            let recent_code = recent_sounds[0].0.clone();
+            expanded_commands = expanded_commands.replace("$recent", &recent_code);
+            performed_substitution = true;
         }
 
         // If no substitutions were performed, append all positional arguments to the last command

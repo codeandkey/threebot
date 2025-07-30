@@ -52,15 +52,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     config.apply_cli_overrides(if cli.verbose { Some(true) } else { None }, cli.data_dir);
 
     // Set up logging based on configuration
-    if config.bot.verbose {
-        pretty_env_logger::formatted_builder()
-            .filter_level(log::LevelFilter::Debug)
-            .init();
-    } else {
-        pretty_env_logger::formatted_builder()
-            .filter_level(log::LevelFilter::Info)
-            .init();
-    }
+    use tracing_subscriber::{fmt, EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+    
+    // Create base filter - disable SQL logging by default
+    let base_level = if config.bot.verbose { "debug" } else { "info" };
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+            // Default filter: use base level but silence SQL logs unless explicitly enabled
+            format!("{},sea_orm::query=warn,sqlx=warn", base_level).into()
+        });
+    
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(
+            fmt::layer()
+                .with_timer(fmt::time::time())
+                .with_target(true)
+                .with_thread_ids(false)
+                .with_file(false)
+                .with_line_number(false)
+        )
+        .init();
 
     info!("Starting Big Bot v{}", env!("CARGO_PKG_VERSION"));
     info!("Using configuration from: {}", config_path.display());

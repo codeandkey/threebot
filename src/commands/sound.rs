@@ -327,12 +327,13 @@ impl Command for SoundCommand {
         args: Vec<String>,
     ) -> Result<(), crate::error::Error> {
         if args.is_empty() {
-            tools.reply("**🔊 Sound Command Help:**\n\
+            tools.reply("
                 • `!sound play` - Play a random sound (with possible random effects)\n\
                 • `!sound play <code>` - Play a specific sound by code (with possible random effects)\n\
                 • `!sound play <code> [effects...]` - Play a sound with audio effects\n\
                 • `!sound play [+effects...]` - Play a random sound with audio effects\n\
-                • `!sound list` - List all available sounds (ordered by newest first, with creation date and aliases)\n\
+                • `!sound list [page]` - List all available sounds (30 per page, ordered by newest first)\n\
+                • `!sound history` - Show the last 10 sounds that were played (most recent first)\n\
                 • `!sound info <code>` - Show detailed information about a sound\n\
                 • `!sound pull <URL> <start> <length>` - Extract audio from a video/audio URL\n\
                 • `!sound scan` - Scan for orphaned sound files\n\
@@ -362,20 +363,44 @@ impl Command for SoundCommand {
                 • `!sound play abc123` - Play sound with code 'abc123' (may have random effects)\n\
                 • `!sound play abc123 loud fast` - Play sound with volume boost and faster tempo\n\
                 • `!sound play abc123 +reverb +echo +bass` - Play sound with reverb, echo, and bass boost effects\n\
+                • `!sound list` - Show first page of sounds\n\
+                • `!sound list 2` - Show second page of sounds\n\
+                • `!sound history` - Show recently played sounds\n\
                 • `!sound pull https://youtube.com/watch?v=... 1:30 5` - Extract 5 seconds starting at 1:30").await?;
             return Ok(());
         }
 
         match args[0].as_str() {
             "list" => {
+                // Parse optional page parameter
+                let page = if args.len() > 1 {
+                    match args[1].parse::<usize>() {
+                        Ok(p) if p > 0 => p,
+                        _ => {
+                            tools.reply("❌ Invalid page number. Use `!sound list [page]` where page is a positive number.").await?;
+                            return Ok(());
+                        }
+                    }
+                } else {
+                    1 // Default to page 1
+                };
+
                 if let Some(manager) = tools.get_sounds_manager() {
                     match manager.list_sounds().await {
                         Ok(sounds) => {
                             if sounds.is_empty() {
                                 tools.reply("📋 No sounds available").await?;
                             } else {
+                                let per_page = 30;
+                                let total_pages = (sounds.len() + per_page - 1) / per_page;
+                                
+                                if page > total_pages {
+                                    tools.reply(&format!("❌ Page {} does not exist. Total pages: {}", page, total_pages)).await?;
+                                    return Ok(());
+                                }
+
                                 let mut response =
-                                    format!("🔊 **Available Sounds** ({} total)\n\n", sounds.len());
+                                    format!("🔊 Available Sounds ({} total)\n\n", sounds.len());
 
                                 // Get alias manager for looking up aliases
                                 let alias_manager = tools.get_alias_manager();
@@ -385,8 +410,7 @@ impl Command for SoundCommand {
                                     &["Created", "Code", "Source", "Author", "Duration", "Aliases"];
                                 let mut rows = Vec::new();
 
-                                for sound in sounds.iter().take(30) {
-                                    // Limit to first 30 to avoid message length issues
+                                for sound in &sounds {
                                     let duration = format!("{:.1}s", sound.length);
                                     let source_link = if let Some(url) = &sound.source_url {
                                         format!("<a href=\"{}\">source</a>", url)
@@ -432,14 +456,17 @@ impl Command for SoundCommand {
                                     ]);
                                 }
 
-                                response.push_str(&tools.create_html_table(headers, &rows));
-
-                                if sounds.len() > 50 {
-                                    response.push_str(&format!(
-                                        "\n\n*Showing first 30 of {} sounds*",
-                                        sounds.len()
-                                    ));
-                                }
+                                // Use pagination
+                                response.push_str("<div style=\"text-align: center;\">");
+                                response.push_str(&tools.create_html_table_paginated(
+                                    headers, 
+                                    &rows, 
+                                    Some(page),
+                                    Some(per_page),
+                                    Some(sounds.len()),
+                                    "!sound list"
+                                ));
+                                response.push_str("</div>");
 
                                 tools.reply_html(&response).await?;
                             }
@@ -449,6 +476,88 @@ impl Command for SoundCommand {
                                 .reply(&format!("❌ Failed to list sounds: {}", e))
                                 .await?;
                         }
+                    }
+                } else {
+                    tools.reply("❌ Sounds manager not available").await?;
+                }
+            }
+            "history" => {
+                if let Some(manager) = tools.get_sounds_manager() {
+                    let history = tools.get_sound_history(10);
+                    
+                    if history.is_empty() {
+                        tools.reply("📋 No sounds have been played recently").await?;
+                    } else {
+                        let mut response = format!("🕰️ Recently Played Sounds ({} total)\n\n", history.len());
+
+                        // Get alias manager for looking up aliases
+                        let alias_manager = tools.get_alias_manager();
+
+                        // Prepare table data
+                        let headers = &["Played", "Code", "Source", "Author", "Duration", "Aliases"];
+                        let mut rows = Vec::new();
+
+                        for (sound_code, played_at) in history {
+                            // Get sound details from the manager
+                            match manager.get_sound(&sound_code).await {
+                                Ok(Some(sound_file)) => {
+                                    if let Some(metadata) = &sound_file.metadata {
+                                        let duration = format!("{:.1}s", metadata.length);
+                                        let source_link = if let Some(url) = &metadata.source_url {
+                                            format!("<a href=\"{}\">source</a>", url)
+                                        } else {
+                                            "-".to_string()
+                                        };
+                                        let author = &metadata.author;
+                                        let played_time = played_at.format("%H:%M:%S").to_string();
+
+                                        // Find aliases that use this sound
+                                        let aliases_text = if let Some(alias_mgr) = &alias_manager {
+                                            match alias_mgr
+                                                .find_aliases_containing_sound(&sound_code)
+                                                .await
+                                            {
+                                                Ok(aliases) => {
+                                                    if aliases.is_empty() {
+                                                        "-".to_string()
+                                                    } else {
+                                                        aliases
+                                                            .iter()
+                                                            .map(|alias| alias.name.as_str())
+                                                            .collect::<Vec<_>>()
+                                                            .join(", ")
+                                                    }
+                                                }
+                                                Err(_) => "?".to_string(),
+                                            }
+                                        } else {
+                                            "?".to_string()
+                                        };
+
+                                        rows.push(vec![
+                                            played_time,
+                                            format!(
+                                                "<span style=\"font-family: serif;\">{}</span>",
+                                                sound_code
+                                            ),
+                                            source_link,
+                                            author.clone(),
+                                            duration,
+                                            aliases_text,
+                                        ]);
+                                    }
+                                    // Skip sounds without metadata
+                                }
+                                // Skip deleted or errored sounds
+                                Ok(None) | Err(_) => {}
+                            }
+                        }
+
+                        response.push_str("<div style=\"text-align: center;\">");
+                        response.push_str(&tools.create_html_table(headers, &rows));
+                        response.push_str("</div>");
+
+                        tools.reply_html(&response).await?;
                     }
                 } else {
                     tools.reply("❌ Sounds manager not available").await?;
@@ -542,9 +651,9 @@ impl Command for SoundCommand {
 
                     if let Some(file_path_str) = sound_file.path_str() {
                         let result = if effects.is_empty() {
-                            tools.play_sound(file_path_str).await
+                            tools.play_sound_with_code(file_path_str, &display_code).await
                         } else {
-                            tools.play_sound_with_effects(file_path_str, &effects).await
+                            tools.play_sound_with_effects_and_code(file_path_str, &effects, &display_code).await
                         };
 
                         match result {
@@ -626,7 +735,7 @@ impl Command for SoundCommand {
                         match manager.get_sound(code).await {
                             Ok(Some(sound_file)) => {
                                 let mut response =
-                                    format!("🔊 **Sound Information: {}**\n\n", code);
+                                    format!("🔊 Sound Information: {}\n\n", code);
 
                                 if let Some(metadata) = &sound_file.metadata {
                                     response
@@ -752,7 +861,7 @@ impl Command for SoundCommand {
                                 tools.reply("✅ No orphaned sound files found - all files are properly registered in the database").await?;
                             } else {
                                 let mut response = format!(
-                                    "🔍 **Orphaned Sound Files Found** ({} files)\n\n",
+                                    "🔍 Orphaned Sound Files Found ({} files)\n\n",
                                     orphaned_files.len()
                                 );
                                 response.push_str("The following files exist on disk but are not registered in the database:\n\n");

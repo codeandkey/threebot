@@ -23,7 +23,7 @@ impl Command for AliasCommand {
                 }
                 "help" => {
                     // Show help
-                    tools.reply("**Alias Command Help:**\n\
+                    tools.reply("🔧 Alias Command Help\n\n\
                         • `!alias` or `!alias list` - List first page of aliases\n\
                         • `!alias list <page>` - List aliases by page (20 per page)\n\
                         • `!alias search <term> [page]` - Search aliases\n\
@@ -31,13 +31,15 @@ impl Command for AliasCommand {
                         • `!alias <name> <commands...>` - Create an alias\n\
                         • `!alias remove <name>` - Remove an alias\n\
                         • `!alias help` - Show this help\n\n\
-                        **Variable substitution:**\n\
+                        Variable substitution:\n\
                         • `$@` - All arguments passed to alias\n\
                         • `$1`, `$2`, etc. - Individual arguments\n\
-                        • `$#` - Number of arguments\n\n\
-                        **Examples:**\n\
+                        • `$#` - Number of arguments\n\
+                        • `$recent` - Most recently played sound code\n\n\
+                        Examples:\n\
                         • `!alias greet sound play hello; sound play $1`\n\
-                        • `!alias welcome greet $@; sound play fanfare`").await
+                        • `!alias welcome greet $@; sound play fanfare`\n\
+                        • `!alias again sound play $recent`").await
                 }
                 _ => {
                     tools.reply("Usage: !alias [list|help] or !alias <name> <commands...> or !alias remove <name>").await
@@ -56,7 +58,7 @@ impl Command for AliasCommand {
                 }
                 Err(_) => {
                     tools
-                        .reply("Invalid page number. Usage: **!alias list <page>**")
+                        .reply("Invalid page number. Usage: !alias list <page>")
                         .await
                 }
             }
@@ -90,7 +92,7 @@ impl Command for AliasCommand {
                 }
                 Err(_) => {
                     tools
-                        .reply("Invalid page number. Usage: **!alias search <term> [page]**")
+                        .reply("Invalid page number. Usage: !alias search <term> [page]")
                         .await
                 }
             }
@@ -165,7 +167,7 @@ impl AliasCommand {
                     if aliases.is_empty() {
                         tools.reply("📋 No aliases defined").await?;
                     } else {
-                        let mut response = String::from("📋 **Aliases:**\n");
+                        let mut response = String::from("📋 Aliases:\n");
                         for alias in aliases {
                             response.push_str(&format!(
                                 "• **{}** (by {}): `{}`\n",
@@ -208,7 +210,7 @@ impl AliasCommand {
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
 
                         let mut response =
-                            format!("📋 **Aliases** (Page {} of {})\n\n", page + 1, total_pages);
+                            format!("📋 Aliases (Page {} of {})\n\n", page + 1, total_pages);
 
                         // Prepare table data
                         let headers = &["Name", "Author", "Commands"];
@@ -223,14 +225,16 @@ impl AliasCommand {
                             })
                             .collect();
 
-                        response.push_str(&tools.create_html_table(headers, &rows));
-
-                        if total_pages > 1 {
-                            response.push_str(&format!(
-                                "\n\nUse `!alias list <page>` to view other pages (1-{})",
-                                total_pages
-                            ));
-                        }
+                        response.push_str("<div style=\"text-align: center;\">");
+                        response.push_str(&tools.create_html_table_paginated(
+                            headers, 
+                            &rows, 
+                            Some((page + 1) as usize), // Convert 0-based to 1-based
+                            Some(20), 
+                            Some(total_count as usize),
+                            "!alias list"
+                        ));
+                        response.push_str("</div>");
                         tools.reply_html(&response).await?;
                     }
                 }
@@ -278,7 +282,7 @@ impl AliasCommand {
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
 
                         let mut response = format!(
-                            "🔍 **Aliases matching '{}'** (Page {} of {})\n\n",
+                            "🔍 Aliases matching '{}' (Page {} of {})\n\n",
                             search_term,
                             page + 1,
                             total_pages
@@ -297,14 +301,16 @@ impl AliasCommand {
                             })
                             .collect();
 
-                        response.push_str(&tools.create_html_table(headers, &rows));
-
-                        if total_pages > 1 {
-                            response.push_str(&format!(
-                                "\n\nUse `!alias search {} <page>` to view other pages (1-{})",
-                                search_term, total_pages
-                            ));
-                        }
+                        response.push_str("<div style=\"text-align: center;\">");
+                        response.push_str(&tools.create_html_table_paginated(
+                            headers, 
+                            &rows, 
+                            Some((page + 1) as usize), // Convert 0-based to 1-based
+                            Some(20), 
+                            Some(total_count as usize),
+                            &format!("!alias search {}", search_term)
+                        ));
+                        response.push_str("</div>");
                         tools.reply_html(&response).await?;
                     }
                 }

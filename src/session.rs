@@ -205,6 +205,7 @@ pub struct Session {
     behavior_settings: BehaviorSettings,
     audio_effects: AudioEffectSettings,
     external_tools: ExternalToolsSettings,
+    sound_history: std::sync::Mutex<std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>>,
 }
 
 impl Session {
@@ -428,6 +429,7 @@ impl Session {
             behavior_settings: options.behavior_settings,
             audio_effects: options.audio_effects,
             external_tools: options.external_tools,
+            sound_history: std::sync::Mutex::new(std::collections::VecDeque::new()),
         })
     }
 
@@ -1095,6 +1097,27 @@ impl SessionTools for Session {
             })
     }
 
+    async fn play_sound_with_code(&self, file_path: &str, sound_code: &str) -> Result<(), Error> {
+        let result = self.play_sound(file_path).await;
+        if result.is_ok() {
+            self.record_sound_played(sound_code);
+        }
+        result
+    }
+
+    async fn play_sound_with_effects_and_code(
+        &self,
+        file_path: &str,
+        effects: &[crate::audio::effects::AudioEffect],
+        sound_code: &str,
+    ) -> Result<(), Error> {
+        let result = self.play_sound_with_effects(file_path, effects).await;
+        if result.is_ok() {
+            self.record_sound_played(sound_code);
+        }
+        result
+    }
+
     async fn stop_all_streams(&self) -> Result<(), Error> {
         self.audio_mixer.control().stop_all_streams().await;
         Ok(())
@@ -1189,6 +1212,26 @@ impl SessionTools for Session {
 
     fn external_tools_settings(&self) -> &crate::config::ExternalToolsSettings {
         &self.external_tools
+    }
+
+    fn record_sound_played(&self, sound_code: &str) {
+        if let Ok(mut history) = self.sound_history.lock() {
+            let now = chrono::Utc::now();
+            history.push_front((sound_code.to_string(), now));
+            
+            // Keep only the last 50 entries to prevent unlimited growth
+            while history.len() > 50 {
+                history.pop_back();
+            }
+        }
+    }
+
+    fn get_sound_history(&self, limit: usize) -> Vec<(String, chrono::DateTime<chrono::Utc>)> {
+        if let Ok(history) = self.sound_history.lock() {
+            history.iter().take(limit).cloned().collect()
+        } else {
+            Vec::new()
+        }
     }
 }
 
