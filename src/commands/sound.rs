@@ -239,7 +239,7 @@ impl SoundCommand {
         if let Ok(Some(sound_file)) = manager.get_sound(&code).await {
             if sound_file.exists() {
                 if let Some(file_path_str) = sound_file.path_str() {
-                    let _ = tools.play_sound(file_path_str).await; // Don't fail if play fails
+                    let _ = tools.play_sound_with_code(file_path_str, &code).await; // Don't fail if play fails
                 }
             }
         }
@@ -335,6 +335,7 @@ impl Command for SoundCommand {
                 • `!sound list [page]` - List all available sounds (30 per page, ordered by newest first)\n\
                 • `!sound history` - Show the last 10 sounds that were played (most recent first)\n\
                 • `!sound info <code>` - Show detailed information about a sound\n\
+                • `!sound remove <code>` - Remove a sound from database and delete file from disk\n\
                 • `!sound pull <URL> <start> <length>` - Extract audio from a video/audio URL\n\
                 • `!sound scan` - Scan for orphaned sound files\n\
                 • `!sound stopall` - Stop all currently playing audio streams\n\n\
@@ -366,6 +367,8 @@ impl Command for SoundCommand {
                 • `!sound list` - Show first page of sounds\n\
                 • `!sound list 2` - Show second page of sounds\n\
                 • `!sound history` - Show recently played sounds\n\
+                • `!sound info abc123` - Show information about sound 'abc123'\n\
+                • `!sound remove abc123` - Remove sound 'abc123' completely (database + file)\n\
                 • `!sound pull https://youtube.com/watch?v=... 1:30 5` - Extract 5 seconds starting at 1:30").await?;
             return Ok(());
         }
@@ -853,45 +856,27 @@ impl Command for SoundCommand {
                     }
                 }
             }
-            "scan" => {
-                if let Some(manager) = tools.get_sounds_manager() {
-                    match manager.scan_orphaned_files().await {
-                        Ok(orphaned_files) => {
-                            if orphaned_files.is_empty() {
-                                tools.reply("✅ No orphaned sound files found - all files are properly registered in the database").await?;
-                            } else {
-                                let mut response = format!(
-                                    "🔍 Orphaned Sound Files Found ({} files)\n\n",
-                                    orphaned_files.len()
-                                );
-                                response.push_str("The following files exist on disk but are not registered in the database:\n\n");
-
-                                for (i, file) in orphaned_files.iter().enumerate() {
-                                    if i < 20 {
-                                        // Limit to first 20 to avoid message length issues
-                                        response.push_str(&format!("• `{}`\n", file));
-                                    }
-                                }
-
-                                if orphaned_files.len() > 20 {
-                                    response.push_str(&format!(
-                                        "\n*... and {} more files*\n",
-                                        orphaned_files.len() - 20
-                                    ));
-                                }
-
-                                response.push_str("\nThese files can be safely deleted or re-registered in the database.");
-                                tools.reply(&response).await?;
+            "remove" => {
+                if args.len() < 2 {
+                    tools.reply("Usage: !sound remove <code>").await?;
+                } else {
+                    let code = &args[1];
+                    if let Some(manager) = tools.get_sounds_manager() {
+                        match manager.remove_sound(code).await {
+                            Ok(()) => {
+                                tools
+                                    .reply(&format!("✅ Sound '{}' removed from database and file deleted from disk", code))
+                                    .await?;
+                            }
+                            Err(e) => {
+                                tools
+                                    .reply(&format!("❌ Failed to remove sound '{}': {}", code, e))
+                                    .await?;
                             }
                         }
-                        Err(e) => {
-                            tools
-                                .reply(&format!("❌ Error scanning for orphaned files: {}", e))
-                                .await?;
-                        }
+                    } else {
+                        tools.reply("❌ Sounds manager not available").await?;
                     }
-                } else {
-                    tools.reply("❌ Sounds manager not available").await?;
                 }
             }
             "stopall" => {
@@ -907,7 +892,7 @@ impl Command for SoundCommand {
     }
 
     fn description(&self) -> &str {
-        "Manage and play sound files - play, list, get info, pull from URLs, and scan for orphaned files"
+        "Manage and play sound files - play, list, get info, remove, pull from URLs, and scan for orphaned files"
     }
 }
 

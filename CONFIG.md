@@ -1,63 +1,50 @@
-# Configuration System
+# Configuration
 
-Big Bot uses a YAML-based configuration system that allows you to customize all aspects of the bot's behavior without recompiling.
+BigBot uses YAML-based configuration that auto-generates on first run.
 
-## Configuration File Location
+## Location
 
-By default, the configuration file is located at:
-- **Linux/macOS**: `~/.bigbot/config.yml`
-- **Windows**: `C:\Users\<username>\.bigbot\config.yml`
+- **Default**: `~/.bigbot/config.yml` (Linux/macOS) or `C:\Users\<username>\.bigbot\config.yml` (Windows)
+- **Custom**: Use `--config /path/to/config.yml`
 
-You can specify a custom configuration file path using the `--config` option.
+## Auto-Generation
 
-## Generating Default Configuration
+Configuration is created automatically if missing:
 
-The bot automatically creates a fully documented configuration file when it runs for the first time. If no configuration file is found at the expected location, the bot will:
-
-1. Create the configuration directory (`~/.bigbot`) if it doesn't exist
-2. Generate a complete example configuration file with all settings documented
-3. Use the generated configuration to start the bot
-
-You can also specify a custom configuration file location using the `--config` option. If the specified file doesn't exist, it will be created automatically with the example configuration.
-
-**Example:**
 ```bash
-# This will auto-create ~/.bigbot/config.yml if it doesn't exist
-./bigbot
-
-# This will auto-create /path/to/custom/config.yml if it doesn't exist  
-./bigbot --config /path/to/custom/config.yml
+./bigbot                              # Creates ~/.bigbot/config.yml
+./bigbot --config /custom/config.yml  # Creates custom config
 ```
 
-## Configuration Sections
+## Key Settings
 
-### Bot Settings (`bot`)
-- `username`: The display name for the bot on the Mumble server
-- `password`: Optional password for server authentication (use `null` if not needed)
-- `verbose`: Enable detailed logging output
+```yaml
+bot:
+  username: "Big Bot"
+  password: null
+  verbose: false
 
-### Server Settings (`server`)
-- `host`: Hostname or IP address of the Mumble server
-- `port`: Port number (default: 64738)
-- `timeout_seconds`: Connection timeout in seconds
+server:
+  host: "localhost"
+  port: 64738
+  timeout_seconds: 10
 
-Several more sections are documented in the example config.
+behavior:
+  auto_greetings: all    # all/custom/none
+  auto_farewells: custom
+  allow_private_commands: true
+  volume: 1.0
 
-## Example Configuration
-
-See `example-config.yml` in the project root for a fully documented example configuration.
+paths:
+  data_dir: null         # Defaults to ~/.bigbot
+```
 
 ## Command Line Overrides
 
-Several configuration options can be overridden from the command line:
-
 ```bash
-# Enable verbose logging (overrides config file)
-./bigbot --verbose
-
-# Use custom data directory (overrides config file)
-./bigbot --data-dir /path/to/custom/data
-
-# Use custom configuration file
-./bigbot --config /path/to/custom/config.yml
+./bigbot --verbose                    # Enable verbose logging
+./bigbot --data-dir /custom/path      # Custom data directory
+./bigbot --config /custom/config.yml # Custom config file
 ```
+
+See `example-config.yml` for full documentation.

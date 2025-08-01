@@ -174,7 +174,7 @@ impl SoundsManager {
         Ok(())
     }
 
-    /// Removes a sound from the database (but not from disk)
+    /// Removes a sound from the database and deletes the file from disk
     pub async fn remove_sound(&self, code: &str) -> Result<(), Error> {
         if !validate_sound_code(code) {
             return Err(Error::InvalidInput(format!("Invalid sound code: {}", code)));
@@ -182,13 +182,31 @@ impl SoundsManager {
 
         let code_upper = code.to_uppercase();
 
+        // First get the sound to obtain the file path
+        let sound_file = match self.get_sound(&code_upper).await? {
+            Some(sound) => sound,
+            None => return Err(Error::InvalidInput(format!("Sound not found: {}", code))),
+        };
+
+        // Delete the file from disk first
+        if sound_file.exists() {
+            if let Err(e) = std::fs::remove_file(&sound_file.file_path) {
+                warn!("Failed to delete sound file {:?}: {}", sound_file.file_path, e);
+                return Err(Error::IOError(e));
+            }
+            info!("Deleted sound file: {:?}", sound_file.file_path);
+        } else {
+            warn!("Sound file {:?} does not exist on disk", sound_file.file_path);
+        }
+
+        // Then remove from database
         let result = sound_entity::Entity::delete_by_id(&code_upper)
             .exec(&self.database)
             .await
             .map_err(|e| Error::DatabaseError(format!("Failed to delete sound: {}", e)))?;
 
         if result.rows_affected == 0 {
-            return Err(Error::InvalidInput(format!("Sound not found: {}", code)));
+            return Err(Error::InvalidInput(format!("Sound not found in database: {}", code)));
         }
 
         info!("Removed sound with code: {}", code);
