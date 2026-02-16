@@ -1,15 +1,13 @@
 use std::{
     io::{self},
     path::Path,
-    process::Stdio,
     sync::Arc,
 };
 
 use log::trace;
 
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt},
-    process::Command,
+    io::AsyncReadExt,
     sync::{Mutex, mpsc},
     time::{self, Duration},
 };
@@ -273,98 +271,14 @@ impl AudioMixerControl {
         let buffer_clone = buffer.clone();
         let finished_clone = finished.clone();
 
-        // Create the processing pipeline
-        let mut child = if !effects.is_empty() {
-            log::info!("Using effects pipeline for {} effects", effects.len());
-            // Apply effects using the streaming processor - this now outputs PCM s16le directly
-            let processor = AudioEffectsProcessor::new(self.audio_effects.clone())
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-
-            // Get the streaming process with effects applied
-            // The effects pipeline now outputs the final PCM format directly
-            processor
-                .apply_effects_streaming(Path::new(file), effects)
-                .await
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
-        } else {
-            log::info!("Using direct ffmpeg conversion (no effects)");
-            // No effects, use original file directly
-            let normalize_filter =
-                crate::audio::effects::pre_effect_normalize_filter(&self.audio_effects);
-            let sample_rate = SAMPLE_RATE.to_string();
-            let channels = CHANNELS.to_string();
-
-            let mut child = Command::new("ffmpeg")
-                .arg("-i")
-                .arg(file)
-                .arg("-af")
-                .arg(normalize_filter)
-                .arg("-f")
-                .arg("s16le")
-                .arg("-acodec")
-                .arg("pcm_s16le")
-                .arg("-ar")
-                .arg(sample_rate)
-                .arg("-ac")
-                .arg(channels)
-                .arg("-")
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped()) // Capture stderr for potential error reporting
-                .spawn()?;
-
-            // Capture stderr in background task (don't log immediately)
-            let stderr_handle = if let Some(stderr) = child.stderr.take() {
-                Some(tokio::spawn(async move {
-                    let mut reader = tokio::io::BufReader::new(stderr);
-                    let mut line = String::new();
-                    let mut lines = Vec::new();
-                    while let Ok(n) = reader.read_line(&mut line).await {
-                        if n == 0 {
-                            break;
-                        }
-                        lines.push(format!("FFmpeg direct conversion stderr: {}", line.trim()));
-                        line.clear();
-                    }
-                    lines
-                }))
-            } else {
-                None
-            };
-
-            // Store stderr handle for later status checking
-            let stderr_handle_for_status = stderr_handle;
-
-            // Spawn task to monitor process and log stderr on apparent failure
-            tokio::spawn(async move {
-                // Wait for stderr collection to complete
-                // Note: We can't directly wait on the child here since stdout is being consumed
-                // Instead, we check stderr content for error indicators
-                if let Some(handle) = stderr_handle_for_status {
-                    match handle.await {
-                        Ok(stderr_lines) => {
-                            // Check if there are any error indicators in stderr
-                            let has_errors = stderr_lines.iter().any(|line| {
-                                line.contains("Error")
-                                    || line.contains("failed")
-                                    || line.contains("Invalid")
-                            });
-
-                            // Log stderr if there were apparent errors
-                            if has_errors {
-                                log::error!("FFmpeg direct conversion appears to have failed:");
-                                for stderr_line in stderr_lines {
-                                    log::error!("{}", stderr_line);
-                                }
-                            }
-                        }
-                        Err(e) => log::error!("Failed to collect FFmpeg stderr: {}", e),
-                    }
-                }
-            });
-
-            child
-        };
+        // Always use the effects pipeline, even with no effects, so normalization behavior is consistent.
+        log::info!("Using effects pipeline for {} effects", effects.len());
+        let processor = AudioEffectsProcessor::new(self.audio_effects.clone())
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        let mut child = processor
+            .apply_effects_streaming(Path::new(file), effects)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
         let mut stdout = child.stdout.take().unwrap();
         let buffer_size = self.audio_buffer_size;

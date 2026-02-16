@@ -75,6 +75,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting Threebot v{}", env!("CARGO_PKG_VERSION"));
     info!("Using configuration from: {}", config_path.display());
+    info!(
+        "Input normalization mode: {:?}",
+        config.audio_effects.normalization_mode
+    );
 
     let data_dir = config.get_data_dir();
 

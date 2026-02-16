@@ -1,4 +1,7 @@
-use crate::{config::AudioEffectSettings, error::Error};
+use crate::{
+    config::{AudioEffectSettings, InputNormalizationMode},
+    error::Error,
+};
 use std::path::Path;
 use std::process::Stdio;
 use tokio::io::AsyncBufReadExt;
@@ -17,6 +20,43 @@ pub fn pre_effect_normalize_filter(config: &AudioEffectSettings) -> String {
             "false"
         }
     )
+}
+
+fn pre_effect_loudnorm_analysis_filter(config: &AudioEffectSettings) -> String {
+    format!(
+        "loudnorm=I={}:LRA={}:TP={}:linear={}:print_format=json",
+        config.loudnorm_target_lufs,
+        config.loudnorm_lra,
+        config.loudnorm_true_peak_db,
+        if config.loudnorm_linear {
+            "true"
+        } else {
+            "false"
+        }
+    )
+}
+
+fn parse_loudnorm_metric(stderr: &str, key: &str) -> Option<f32> {
+    let json_start = stderr.find('{')?;
+    let json_end = stderr.rfind('}')?;
+    let json = &stderr[json_start..=json_end];
+
+    let key_token = format!("\"{}\"", key);
+    let key_idx = json.find(&key_token)?;
+    let after_key = &json[key_idx + key_token.len()..];
+    let colon_idx = after_key.find(':')?;
+    let mut value = after_key[colon_idx + 1..].trim_start();
+
+    if value.starts_with('\"') {
+        value = &value[1..];
+        let end_idx = value.find('\"')?;
+        return value[..end_idx].trim().parse::<f32>().ok();
+    }
+
+    let end_idx = value
+        .find(|c: char| c == ',' || c == '}' || c.is_whitespace())
+        .unwrap_or(value.len());
+    value[..end_idx].trim().parse::<f32>().ok()
 }
 
 /// Available audio effects that can be applied to sounds
@@ -257,7 +297,7 @@ impl PipelineBuilder {
             ));
         }
 
-        log::info!(
+        log::debug!(
             "Starting pipeline execution with {} stages",
             self.stages.len()
         );
@@ -270,7 +310,7 @@ impl PipelineBuilder {
             let mut child = match stage {
                 PipelineStage::Ffmpeg { mut command } => {
                     // Log the exact command being executed
-                    log::info!("Stage {}: Executing ffmpeg command: {:?}", i, command);
+                    log::debug!("Stage {}: Executing ffmpeg command: {:?}", i, command);
                     let mut child = command.spawn().map_err(|e| {
                         log::error!("Failed to spawn ffmpeg process for stage {}: {}", i, e);
                         Error::IOError(e)
@@ -307,7 +347,7 @@ impl PipelineBuilder {
                     child
                 }
                 PipelineStage::Sox { mut command } => {
-                    log::info!("Stage {}: Executing sox command: {:?}", i, command);
+                    log::debug!("Stage {}: Executing sox command: {:?}", i, command);
                     let mut child = command.spawn().map_err(|e| {
                         log::error!("Failed to spawn sox process for stage {}: {}", i, e);
                         Error::IOError(e)
@@ -422,7 +462,7 @@ impl PipelineBuilder {
             }
         });
 
-        log::info!("Pipeline execution started, returning final process for streaming");
+        log::debug!("Pipeline execution started, returning final process for streaming");
         Ok(final_process)
     }
 }
@@ -438,6 +478,90 @@ impl AudioEffectsProcessor {
         Ok(AudioEffectsProcessor { config })
     }
 
+    async fn build_pre_effect_normalization_filter(
+        &self,
+        input_file: &Path,
+    ) -> Result<String, Error> {
+        match self.config.normalization_mode {
+            InputNormalizationMode::Loudnorm => {
+                let filter = pre_effect_normalize_filter(&self.config);
+                log::debug!(
+                    "Input normalization mode=loudnorm (I={} LUFS, LRA={}, TP={} dBTP, linear={})",
+                    self.config.loudnorm_target_lufs,
+                    self.config.loudnorm_lra,
+                    self.config.loudnorm_true_peak_db,
+                    self.config.loudnorm_linear
+                );
+                log::debug!("Input normalization filter: {}", filter);
+                Ok(filter)
+            }
+            InputNormalizationMode::BoostOnly => {
+                log::debug!(
+                    "Input normalization mode=boost_only (target={} LUFS, TP cap={} dBTP)",
+                    self.config.loudnorm_target_lufs,
+                    self.config.loudnorm_true_peak_db
+                );
+                let analysis_filter = pre_effect_loudnorm_analysis_filter(&self.config);
+                let output = tokio::process::Command::new("ffmpeg")
+                    .arg("-i")
+                    .arg(input_file)
+                    .arg("-af")
+                    .arg(analysis_filter)
+                    .arg("-f")
+                    .arg("null")
+                    .arg("-")
+                    .arg("-y")
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .output()
+                    .await
+                    .map_err(Error::IOError)?;
+
+                if !output.status.success() {
+                    return Err(Error::InvalidInput(format!(
+                        "Failed to analyze input loudness for boost-only normalization: ffmpeg exited with status {}",
+                        output.status
+                    )));
+                }
+
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let input_i = parse_loudnorm_metric(&stderr, "input_i").ok_or_else(|| {
+                    Error::InvalidInput(
+                        "Failed to parse loudnorm input_i from ffmpeg analysis output".to_string(),
+                    )
+                })?;
+                let input_tp = parse_loudnorm_metric(&stderr, "input_tp").ok_or_else(|| {
+                    Error::InvalidInput(
+                        "Failed to parse loudnorm input_tp from ffmpeg analysis output".to_string(),
+                    )
+                })?;
+
+                // Only apply positive gain, and cap by true-peak headroom.
+                let gain_to_target_db = self.config.loudnorm_target_lufs - input_i;
+                let headroom_db = self.config.loudnorm_true_peak_db - input_tp;
+                let gain_db = gain_to_target_db.min(headroom_db).max(0.0);
+
+                if gain_db <= 0.01 {
+                    log::debug!(
+                        "Boost-only normalization: no gain applied (input_i={:.2} LUFS, input_tp={:.2} dBTP)",
+                        input_i,
+                        input_tp
+                    );
+                    Ok("anull".to_string())
+                } else {
+                    let filter = format!("volume={:.3}dB", gain_db);
+                    log::debug!(
+                        "Boost-only normalization: applying +{:.2} dB (input_i={:.2} LUFS, input_tp={:.2} dBTP)",
+                        gain_db,
+                        input_i,
+                        input_tp
+                    );
+                    Ok(filter)
+                }
+            }
+        }
+    }
+
     /// Apply a chain of effects to an audio file using real-time streaming
     /// Returns the final streaming process for immediate consumption
     pub async fn apply_effects_streaming(
@@ -445,14 +569,18 @@ impl AudioEffectsProcessor {
         input_file: &Path,
         effects: &[AudioEffect],
     ) -> Result<tokio::process::Child, Error> {
-        log::info!(
+        log::debug!(
             "Applying {} effects to audio file: {:?}",
             effects.len(),
             input_file
         );
         for effect in effects {
-            log::info!("  - Effect: {:?}", effect);
+            log::debug!("  - Effect: {:?}", effect);
         }
+
+        let pre_effect_filter = self
+            .build_pre_effect_normalization_filter(input_file)
+            .await?;
 
         // Build the pipeline stages
         let mut pipeline = PipelineBuilder::new(self.config.clone());
@@ -465,7 +593,7 @@ impl AudioEffectsProcessor {
         let has_reverb = effects.iter().any(|e| e.requires_sox());
         let ffmpeg_effects: Vec<_> = effects.iter().filter(|e| !e.requires_sox()).collect();
 
-        log::info!(
+        log::debug!(
             "Pipeline configuration: has_reverb={}, ffmpeg_effects_count={}",
             has_reverb,
             ffmpeg_effects.len()
@@ -474,7 +602,7 @@ impl AudioEffectsProcessor {
         // Stage 1: Start with ffmpeg for format conversion to PCM, optionally with effects
         if !has_reverb && !ffmpeg_effects.is_empty() {
             // If we only have ffmpeg effects and no reverb, apply normalization first, then effects.
-            let mut filters = vec![pre_effect_normalize_filter(&self.config)];
+            let mut filters = vec![pre_effect_filter.clone()];
             filters.extend(
                 ffmpeg_effects
                     .iter()
@@ -482,21 +610,17 @@ impl AudioEffectsProcessor {
                     .collect::<Vec<_>>(),
             );
             let filter_chain = filters.join(",");
-            log::info!("Stage 1: ffmpeg with effects filter: {}", filter_chain);
+            log::debug!("Stage 1: ffmpeg with effects filter: {}", filter_chain);
             pipeline.add_ffmpeg_stage(ffmpeg_cmd, Some(filter_chain), "s16le")?;
         } else {
             // Always normalize input before subsequent stages/effects.
-            log::info!("Stage 1: ffmpeg input normalization and format conversion to PCM s16le");
-            pipeline.add_ffmpeg_stage(
-                ffmpeg_cmd,
-                Some(pre_effect_normalize_filter(&self.config)),
-                "s16le",
-            )?;
+            log::debug!("Stage 1: ffmpeg input normalization and format conversion to PCM s16le");
+            pipeline.add_ffmpeg_stage(ffmpeg_cmd, Some(pre_effect_filter), "s16le")?;
         }
 
         // Stage 2: Add sox stage if reverb is needed
         if has_reverb {
-            log::info!("Stage 2: sox reverb processing");
+            log::debug!("Stage 2: sox reverb processing");
             pipeline.add_sox_stage()?;
         }
 
@@ -508,14 +632,14 @@ impl AudioEffectsProcessor {
                 .map(|effect| effect.to_ffmpeg_filter(&self.config))
                 .collect::<Vec<_>>()
                 .join(",");
-            log::info!("Stage 3: ffmpeg with effects filter: {}", filter_chain);
+            log::debug!("Stage 3: ffmpeg with effects filter: {}", filter_chain);
             pipeline.add_ffmpeg_stage_with_input_pipe(Some(filter_chain))?;
         } else if has_reverb {
             // Only reverb, no additional processing needed since sox outputs PCM
-            log::info!("Stage 3: No additional processing needed after sox");
+            log::debug!("Stage 3: No additional processing needed after sox");
         }
 
-        log::info!("Executing pipeline with {} stages", pipeline.stages.len());
+        log::debug!("Executing pipeline with {} stages", pipeline.stages.len());
 
         // Execute the pipeline and return the streaming process
         pipeline.execute_streaming().await
@@ -625,6 +749,7 @@ mod tests {
             loudnorm_lra: 11.0,
             loudnorm_true_peak_db: -1.5,
             loudnorm_linear: true,
+            normalization_mode: InputNormalizationMode::Loudnorm,
         };
         let _processor = AudioEffectsProcessor::new(config).unwrap();
 
@@ -678,6 +803,7 @@ mod tests {
             loudnorm_lra: 11.0,
             loudnorm_true_peak_db: -1.5,
             loudnorm_linear: true,
+            normalization_mode: InputNormalizationMode::Loudnorm,
         };
 
         assert_eq!(AudioEffect::Loud.to_ffmpeg_filter(&config), "volume=6dB");

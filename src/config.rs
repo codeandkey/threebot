@@ -96,6 +96,9 @@ pub struct AudioEffectSettings {
     /// Whether loudnorm runs in linear mode for pre-effect normalization
     #[serde(default = "default_loudnorm_linear")]
     pub loudnorm_linear: bool,
+    /// Input normalization mode: target-based loudnorm or boost-only gain
+    #[serde(default = "default_input_normalization_mode")]
+    pub normalization_mode: InputNormalizationMode,
 }
 
 fn default_loudnorm_target_lufs() -> f32 {
@@ -112,6 +115,19 @@ fn default_loudnorm_true_peak_db() -> f32 {
 
 fn default_loudnorm_linear() -> bool {
     true
+}
+
+fn default_input_normalization_mode() -> InputNormalizationMode {
+    InputNormalizationMode::Loudnorm
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InputNormalizationMode {
+    #[serde(alias = "loud_norm")]
+    Loudnorm,
+    #[serde(alias = "boost-only", alias = "boostonly")]
+    BoostOnly,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,6 +233,7 @@ impl Default for BotConfig {
                 loudnorm_lra: default_loudnorm_lra(),
                 loudnorm_true_peak_db: default_loudnorm_true_peak_db(),
                 loudnorm_linear: default_loudnorm_linear(),
+                normalization_mode: default_input_normalization_mode(),
             },
             paths: PathSettings {
                 data_dir: None,
@@ -344,6 +361,8 @@ audio_effects:
   loudnorm_true_peak_db: -1.5
   # Use linear loudnorm mode (recommended for realtime one-pass processing)
   loudnorm_linear: true
+  # Input normalization mode: "loudnorm" or "boost_only"
+  normalization_mode: loudnorm
 
 # File and directory paths
 paths:
