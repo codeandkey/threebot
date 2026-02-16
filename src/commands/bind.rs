@@ -110,10 +110,6 @@ impl Command for BindCommand {
 
         Ok(())
     }
-
-    fn description(&self) -> &str {
-        "Set or execute personal bind commands - !bind <command> to set, !bind to execute"
-    }
 }
 
 #[cfg(test)]

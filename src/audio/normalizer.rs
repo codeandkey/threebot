@@ -118,22 +118,6 @@ impl VolumeNormalizer {
     fn db_to_linear(&self, db: f32) -> f32 {
         10.0f32.powf(db / 20.0)
     }
-
-    /// Get current gain multiplier (for debugging/monitoring)
-    pub fn current_gain(&self) -> f32 {
-        self.current_gain
-    }
-
-    /// Get current gain in dB (for debugging/monitoring)
-    pub fn current_gain_db(&self) -> f32 {
-        20.0 * self.current_gain.log10()
-    }
-
-    /// Reset the normalizer state
-    pub fn reset(&mut self) {
-        self.loudness_buffer.clear();
-        self.current_gain = 1.0;
-    }
 }
 
 #[cfg(test)]

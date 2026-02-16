@@ -9,6 +9,7 @@ pub enum AudioEffect {
     Loud,    // Increase volume
     Fast,    // Increase speed/tempo
     Slow,    // Decrease speed/tempo
+    Phone,   // Simulate narrow-band phone-call audio
     Reverb,  // Add reverb effect
     Echo,    // Add echo effect
     Up,      // Pitch up
@@ -25,6 +26,7 @@ impl AudioEffect {
             "loud" => Some(AudioEffect::Loud),
             "fast" => Some(AudioEffect::Fast),
             "slow" => Some(AudioEffect::Slow),
+            "phone" => Some(AudioEffect::Phone),
             "reverb" => Some(AudioEffect::Reverb),
             "echo" => Some(AudioEffect::Echo),
             "up" => Some(AudioEffect::Up),
@@ -36,41 +38,16 @@ impl AudioEffect {
         }
     }
 
-    /// Get a description of the effect with configuration parameters
-    pub fn description(&self, config: &AudioEffectSettings) -> String {
-        match self {
-            AudioEffect::Loud => format!("Increase volume (+{}dB)", config.loud_boost_db),
-            AudioEffect::Fast => {
-                format!("Increase speed/tempo ({}x)", config.fast_speed_multiplier)
-            }
-            AudioEffect::Slow => {
-                format!("Decrease speed/tempo ({}x)", config.slow_speed_multiplier)
-            }
-            AudioEffect::Reverb => "Add reverb effect".to_string(),
-            AudioEffect::Echo => format!(
-                "Add echo effect ({}ms delay, {} feedback)",
-                config.echo_delay_ms, config.echo_feedback
-            ),
-            AudioEffect::Up => format!("Pitch up (+{} cents)", config.pitch_up_cents),
-            AudioEffect::Down => format!("Pitch down ({} cents)", config.pitch_down_cents),
-            AudioEffect::Bass => format!(
-                "Bass boost (+{}dB at {}Hz)",
-                config.bass_boost_gain_db, config.bass_boost_frequency_hz
-            ),
-            AudioEffect::Reverse => "Play audio backwards".to_string(),
-            AudioEffect::Muffle => format!(
-                "Apply low-pass filter (cutoff: {}Hz)",
-                config.muffle_cutoff_frequency_hz
-            ),
-        }
-    }
-
     /// Get the ffmpeg filter string for this effect with configuration parameters
     fn to_ffmpeg_filter(&self, config: &AudioEffectSettings) -> String {
         match self {
             AudioEffect::Loud => format!("volume={}dB", config.loud_boost_db),
             AudioEffect::Fast => format!("atempo={}", config.fast_speed_multiplier),
             AudioEffect::Slow => format!("atempo={}", config.slow_speed_multiplier),
+            AudioEffect::Phone => {
+                // Simulate PSTN-style voice band with mild clipping/compression character.
+                "highpass=f=300,lowpass=f=3400,acompressor=threshold=-18dB:ratio=4:attack=5:release=80,alimiter=limit=0.85".to_string()
+            }
             AudioEffect::Reverb => panic!("Reverb effect should be handled by sox, not ffmpeg"),
             AudioEffect::Echo => format!(
                 "aecho=0.8:0.9:{}:{}",
@@ -537,7 +514,7 @@ pub fn parse_effects(effect_strings: &[String]) -> Result<Vec<AudioEffect>, Erro
 
     if !unknown_effects.is_empty() {
         return Err(Error::InvalidInput(format!(
-            "Unknown effects: {}. Available effects: loud, fast, slow, reverb, echo, up, down, bass, reverse, muffle",
+            "Unknown effects: {}. Available effects: loud, fast, slow, phone, reverb, echo, up, down, bass, reverse, muffle",
             unknown_effects.join(", ")
         )));
     }
@@ -553,6 +530,7 @@ mod tests {
     fn test_effect_parsing() {
         assert_eq!(AudioEffect::from_str("loud"), Some(AudioEffect::Loud));
         assert_eq!(AudioEffect::from_str("FAST"), Some(AudioEffect::Fast));
+        assert_eq!(AudioEffect::from_str("phone"), Some(AudioEffect::Phone));
         assert_eq!(AudioEffect::from_str("Reverb"), Some(AudioEffect::Reverb));
         assert_eq!(AudioEffect::from_str("bass"), Some(AudioEffect::Bass));
         assert_eq!(AudioEffect::from_str("BASS"), Some(AudioEffect::Bass));
@@ -677,6 +655,10 @@ mod tests {
         assert_eq!(AudioEffect::Loud.to_ffmpeg_filter(&config), "volume=6dB");
         assert_eq!(AudioEffect::Fast.to_ffmpeg_filter(&config), "atempo=1.5");
         assert_eq!(AudioEffect::Slow.to_ffmpeg_filter(&config), "atempo=0.75");
+        assert_eq!(
+            AudioEffect::Phone.to_ffmpeg_filter(&config),
+            "highpass=f=300,lowpass=f=3400,acompressor=threshold=-18dB:ratio=4:attack=5:release=80,alimiter=limit=0.85"
+        );
         assert_eq!(
             AudioEffect::Echo.to_ffmpeg_filter(&config),
             "aecho=0.8:0.9:300:0.3"

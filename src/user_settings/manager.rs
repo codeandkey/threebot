@@ -1,7 +1,7 @@
 use crate::database::connection::DbPool;
-use crate::database::entities::user_settings::{self as user_settings_entity, SettingType};
+use crate::database::entities::user_settings::SettingType;
 use crate::error::Error;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{OptionalExtension, params};
 
 #[derive(Clone)]

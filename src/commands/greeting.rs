@@ -98,8 +98,4 @@ impl Command for GreetingCommand {
 
         Ok(())
     }
-
-    fn description(&self) -> &str {
-        "Set or remove personal greeting commands - !greeting <command> to set, !greeting to remove"
-    }
 }

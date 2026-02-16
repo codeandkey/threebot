@@ -68,7 +68,6 @@ pub struct AudioMixer {
     seq: u32,
     volume: f32,
     normalizer: Option<VolumeNormalizer>,
-    audio_effects: AudioEffectSettings,
     // Pre-allocated buffers to reduce allocations in hot path
     mixed_buffer: Vec<i16>,
     temp_buffer: Vec<i16>,
@@ -98,7 +97,7 @@ impl AudioMixer {
     pub fn new(
         writer_sender: mpsc::Sender<OutgoingMessage>,
         behavior_settings: &BehaviorSettings,
-        audio_effects: &AudioEffectSettings,
+        _audio_effects: &AudioEffectSettings,
     ) -> Self {
         let normalizer = if behavior_settings.volume_normalization_enabled {
             Some(VolumeNormalizer::new(
@@ -122,7 +121,6 @@ impl AudioMixer {
             seq: 0,
             volume: behavior_settings.volume,
             normalizer,
-            audio_effects: audio_effects.clone(),
             // Pre-allocate buffers for better performance
             mixed_buffer: vec![0; FRAME_SAMPLES],
             temp_buffer: Vec::with_capacity(FRAME_SAMPLES),

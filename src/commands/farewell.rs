@@ -98,8 +98,4 @@ impl Command for FarewellCommand {
 
         Ok(())
     }
-
-    fn description(&self) -> &str {
-        "Set or remove personal farewell commands - !farewell <command> to set, !farewell to remove"
-    }
 }

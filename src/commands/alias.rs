@@ -123,10 +123,6 @@ impl Command for AliasCommand {
                 .await
         }
     }
-
-    fn description(&self) -> &str {
-        "Create or list command aliases. Usage: !alias <name> <commands...> or !alias list"
-    }
 }
 
 impl AliasCommand {
@@ -149,37 +145,6 @@ impl AliasCommand {
                 Err(e) => {
                     tools
                         .reply(&format!(" Failed to create alias: {}", e))
-                        .await?;
-                }
-            }
-            return Ok(());
-        }
-
-        tools.reply(" Alias manager not available").await
-    }
-
-    /// Lists all aliases
-    async fn list_aliases(&self, tools: &dyn SessionTools) -> Result<(), Error> {
-        // Get the alias manager
-        if let Some(alias_manager) = tools.get_alias_manager() {
-            match alias_manager.list_aliases().await {
-                Ok(aliases) => {
-                    if aliases.is_empty() {
-                        tools.reply(" No aliases defined").await?;
-                    } else {
-                        let mut response = String::from(" Aliases:\n");
-                        for alias in aliases {
-                            response.push_str(&format!(
-                                " **{}** (by {}): `{}`\n",
-                                alias.name, alias.author, alias.commands
-                            ));
-                        }
-                        tools.reply(&response).await?;
-                    }
-                }
-                Err(e) => {
-                    tools
-                        .reply(&format!(" Failed to list aliases: {}", e))
                         .await?;
                 }
             }

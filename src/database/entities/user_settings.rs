@@ -24,13 +24,4 @@ impl SettingType {
             SettingType::Farewell => "farewell",
         }
     }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "bind" => Some(SettingType::Bind),
-            "greeting" => Some(SettingType::Greeting),
-            "farewell" => Some(SettingType::Farewell),
-            _ => None,
-        }
-    }
 }

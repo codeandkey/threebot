@@ -391,9 +391,6 @@ pub trait Command: Send + Sync {
         context: CommandContext,
         args: Vec<String>,
     ) -> Result<(), Error>;
-    fn description(&self) -> &str {
-        "No description available"
-    }
 }
 
 pub mod alias;
@@ -659,44 +656,6 @@ impl Executor {
         }
 
         Ok(())
-    }
-
-    // Get a singleton instance of a command by filename
-    pub fn get_command_instance(command_name: &str) -> Option<Box<dyn Command>> {
-        match command_name {
-            "ping" => Some(create_ping_command()),
-            _ => None,
-        }
-    }
-
-    /// Helper method to create a CommandContext for text message commands
-    pub fn create_text_command_context(
-        triggering_user_id: Option<u32>,
-        source_channel_id: Option<u32>,
-        is_private_message: bool,
-    ) -> CommandContext {
-        CommandContext {
-            triggering_user_id,
-            source_channel_id,
-            is_private_message,
-        }
-    }
-
-    /// Helper method to execute a command from a text message
-    pub async fn execute_from_text_message(
-        &self,
-        cmdline: &str,
-        tools: &dyn SessionTools,
-        triggering_user_id: Option<u32>,
-        source_channel_id: Option<u32>,
-        is_private_message: bool,
-    ) -> Result<(), Error> {
-        let context = Self::create_text_command_context(
-            triggering_user_id,
-            source_channel_id,
-            is_private_message,
-        );
-        self.execute(cmdline, tools, context).await
     }
 }
 

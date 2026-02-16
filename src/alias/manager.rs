@@ -104,48 +104,6 @@ impl AliasManager {
         .map_err(|e| Error::DatabaseError(format!("Alias get task failed: {}", e)))?
     }
 
-    /// Lists all aliases
-    pub async fn list_aliases(&self) -> Result<Vec<alias_entity::Model>, Error> {
-        let pool = self.db.clone();
-
-        tokio::task::spawn_blocking(move || -> Result<Vec<alias_entity::Model>, Error> {
-            let conn = pool
-                .get()
-                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
-            let mut stmt = conn
-                .prepare("SELECT name, author, created_at, commands FROM aliases")
-                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
-
-            let rows = stmt
-                .query_map([], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                    ))
-                })
-                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
-
-            let mut aliases = Vec::new();
-            for row in rows {
-                let (name, author, created_at_raw, commands) = row.map_err(|e| {
-                    Error::DatabaseError(format!("Failed to read alias row: {}", e))
-                })?;
-                aliases.push(alias_entity::Model {
-                    name,
-                    author,
-                    created_at: Self::parse_created_at(&created_at_raw)?,
-                    commands,
-                });
-            }
-
-            Ok(aliases)
-        })
-        .await
-        .map_err(|e| Error::DatabaseError(format!("Alias list task failed: {}", e)))?
-    }
-
     /// Deletes an alias by name
     pub async fn delete_alias(&self, name: &str) -> Result<bool, Error> {
         let pool = self.db.clone();
@@ -162,30 +120,6 @@ impl AliasManager {
         })
         .await
         .map_err(|e| Error::DatabaseError(format!("Alias delete task failed: {}", e)))?
-    }
-
-    /// Checks if an alias exists
-    pub async fn alias_exists(&self, name: &str) -> Result<bool, Error> {
-        let pool = self.db.clone();
-        let name = name.to_string();
-
-        tokio::task::spawn_blocking(move || -> Result<bool, Error> {
-            let conn = pool
-                .get()
-                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
-            let count: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM aliases WHERE name = ?1",
-                    params![name],
-                    |row| row.get(0),
-                )
-                .map_err(|e| {
-                    Error::DatabaseError(format!("Failed to check alias existence: {}", e))
-                })?;
-            Ok(count > 0)
-        })
-        .await
-        .map_err(|e| Error::DatabaseError(format!("Alias exists task failed: {}", e)))?
     }
 
     /// Lists aliases with pagination
@@ -336,57 +270,35 @@ impl AliasManager {
         .map_err(|e| Error::DatabaseError(format!("Alias search count task failed: {}", e)))?
     }
 
-    /// Finds aliases that contain a specific sound code in their commands
-    pub async fn find_aliases_containing_sound(
-        &self,
-        sound_code: &str,
-    ) -> Result<Vec<alias_entity::Model>, Error> {
+    /// Lists alias names and command strings for bulk in-memory sound matching.
+    pub async fn list_alias_names_and_commands(&self) -> Result<Vec<(String, String)>, Error> {
         let pool = self.db.clone();
-        let search_pattern = format!("%{}%", sound_code);
 
-        tokio::task::spawn_blocking(move || -> Result<Vec<alias_entity::Model>, Error> {
+        tokio::task::spawn_blocking(move || -> Result<Vec<(String, String)>, Error> {
             let conn = pool
                 .get()
                 .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+
             let mut stmt = conn
-                .prepare(
-                    "SELECT name, author, created_at, commands
-                     FROM aliases
-                     WHERE lower(commands) LIKE lower(?1)
-                     ORDER BY name ASC",
-                )
-                .map_err(|e| {
-                    Error::DatabaseError(format!("Failed to search aliases for sound code: {}", e))
-                })?;
+                .prepare("SELECT name, commands FROM aliases")
+                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
 
             let rows = stmt
-                .query_map(params![search_pattern], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                    ))
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                 })
-                .map_err(|e| {
-                    Error::DatabaseError(format!("Failed to search aliases for sound code: {}", e))
-                })?;
+                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
 
             let mut aliases = Vec::new();
             for row in rows {
-                let (name, author, created_at_raw, commands) = row.map_err(|e| {
+                aliases.push(row.map_err(|e| {
                     Error::DatabaseError(format!("Failed to read alias row: {}", e))
-                })?;
-                aliases.push(alias_entity::Model {
-                    name,
-                    author,
-                    created_at: Self::parse_created_at(&created_at_raw)?,
-                    commands,
-                });
+                })?);
             }
+
             Ok(aliases)
         })
         .await
-        .map_err(|e| Error::DatabaseError(format!("Alias by sound task failed: {}", e)))?
+        .map_err(|e| Error::DatabaseError(format!("Alias list task failed: {}", e)))?
     }
 }

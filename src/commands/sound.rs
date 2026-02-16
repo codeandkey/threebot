@@ -1,9 +1,34 @@
 use super::{Command, CommandContext, SessionTools};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub struct SoundCommand;
 
 impl SoundCommand {
+    fn build_alias_index(aliases: &[(String, String)]) -> HashMap<String, Vec<String>> {
+        let mut index: HashMap<String, Vec<String>> = HashMap::new();
+
+        for (alias_name, commands) in aliases {
+            let mut seen_codes = HashSet::new();
+            for code in Self::extract_sound_codes(commands) {
+                if seen_codes.insert(code.clone()) {
+                    index.entry(code).or_default().push(alias_name.clone());
+                }
+            }
+        }
+
+        index
+    }
+
+    /// Extract potential 4-letter sound codes from command text.
+    fn extract_sound_codes(commands: &str) -> Vec<String> {
+        commands
+            .split(|c: char| !c.is_ascii_alphabetic())
+            .filter(|token| token.len() == 4)
+            .map(|token| token.to_uppercase())
+            .collect()
+    }
+
     /// Check if a string represents an audio effect (with or without + prefix)
     fn is_audio_effect(&self, arg: &str) -> bool {
         let effect_name = arg.strip_prefix('+').unwrap_or(arg);
@@ -12,6 +37,7 @@ impl SoundCommand {
             "loud"
                 | "fast"
                 | "slow"
+                | "phone"
                 | "reverb"
                 | "echo"
                 | "up"
@@ -43,6 +69,7 @@ impl SoundCommand {
             crate::audio::effects::AudioEffect::Loud,
             crate::audio::effects::AudioEffect::Fast,
             crate::audio::effects::AudioEffect::Slow,
+            crate::audio::effects::AudioEffect::Phone,
             crate::audio::effects::AudioEffect::Reverb,
             crate::audio::effects::AudioEffect::Echo,
             crate::audio::effects::AudioEffect::Up,
@@ -352,6 +379,7 @@ impl Command for SoundCommand {
                  `loud` - Increase volume (+6dB)\n\
                  `fast` - Increase speed/tempo (1.5x)\n\
                  `slow` - Decrease speed/tempo (0.75x)\n\
+                 `phone` - Simulate phone-call quality (band-limited/compressed)\n\
                  `reverb` - Add reverb effect\n\
                  `echo` - Add echo effect\n\
                  `up` - Pitch up (+200 cents)\n\
@@ -421,6 +449,14 @@ impl Command for SoundCommand {
 
                                 // Get alias manager for looking up aliases
                                 let alias_manager = tools.get_alias_manager();
+                                let alias_index = if let Some(alias_mgr) = &alias_manager {
+                                    match alias_mgr.list_alias_names_and_commands().await {
+                                        Ok(aliases) => Some(Self::build_alias_index(&aliases)),
+                                        Err(_) => None,
+                                    }
+                                } else {
+                                    None
+                                };
 
                                 // Prepare table data
                                 let headers =
@@ -438,24 +474,13 @@ impl Command for SoundCommand {
                                     let created = sound.created_at.format("%m/%d/%y").to_string();
 
                                     // Find aliases that use this sound
-                                    let aliases_text = if let Some(alias_mgr) = &alias_manager {
-                                        match alias_mgr
-                                            .find_aliases_containing_sound(&sound.code)
-                                            .await
-                                        {
-                                            Ok(aliases) => {
-                                                if aliases.is_empty() {
-                                                    "-".to_string()
-                                                } else {
-                                                    aliases
-                                                        .iter()
-                                                        .map(|alias| alias.name.as_str())
-                                                        .collect::<Vec<_>>()
-                                                        .join(", ")
-                                                }
-                                            }
-                                            Err(_) => "?".to_string(),
-                                        }
+                                    let aliases_text = if let Some(index) = &alias_index {
+                                        index
+                                            .get(&sound.code.to_uppercase())
+                                            .map(|aliases| aliases.join(", "))
+                                            .unwrap_or_else(|| "-".to_string())
+                                    } else if alias_manager.is_some() {
+                                        "?".to_string()
                                     } else {
                                         "?".to_string()
                                     };
@@ -510,6 +535,14 @@ impl Command for SoundCommand {
 
                         // Get alias manager for looking up aliases
                         let alias_manager = tools.get_alias_manager();
+                        let alias_index = if let Some(alias_mgr) = &alias_manager {
+                            match alias_mgr.list_alias_names_and_commands().await {
+                                Ok(aliases) => Some(Self::build_alias_index(&aliases)),
+                                Err(_) => None,
+                            }
+                        } else {
+                            None
+                        };
 
                         // Prepare table data
                         let headers =
@@ -531,24 +564,13 @@ impl Command for SoundCommand {
                                         let played_time = played_at.format("%H:%M:%S").to_string();
 
                                         // Find aliases that use this sound
-                                        let aliases_text = if let Some(alias_mgr) = &alias_manager {
-                                            match alias_mgr
-                                                .find_aliases_containing_sound(&sound_code)
-                                                .await
-                                            {
-                                                Ok(aliases) => {
-                                                    if aliases.is_empty() {
-                                                        "-".to_string()
-                                                    } else {
-                                                        aliases
-                                                            .iter()
-                                                            .map(|alias| alias.name.as_str())
-                                                            .collect::<Vec<_>>()
-                                                            .join(", ")
-                                                    }
-                                                }
-                                                Err(_) => "?".to_string(),
-                                            }
+                                        let aliases_text = if let Some(index) = &alias_index {
+                                            index
+                                                .get(&sound_code.to_uppercase())
+                                                .map(|aliases| aliases.join(", "))
+                                                .unwrap_or_else(|| "-".to_string())
+                                        } else if alias_manager.is_some() {
+                                            "?".to_string()
                                         } else {
                                             "?".to_string()
                                         };
@@ -894,10 +916,6 @@ impl Command for SoundCommand {
         }
 
         Ok(())
-    }
-
-    fn description(&self) -> &str {
-        "Manage and play sound files - play, list, get info, remove, pull from URLs, and scan for orphaned files"
     }
 }
 

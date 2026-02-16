@@ -360,26 +360,6 @@ external_tools:
         Ok(())
     }
 
-    /// Save configuration to a YAML file
-    pub fn save<P: AsRef<std::path::Path>>(&self, config_path: P) -> Result<(), Error> {
-        let config_path = config_path.as_ref();
-
-        // Ensure parent directory exists
-        if let Some(parent) = config_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                Error::ConfigError(format!("Failed to create config directory: {}", e))
-            })?;
-        }
-
-        let config_content = serde_yaml::to_string(self)
-            .map_err(|e| Error::ConfigError(format!("Failed to serialize config: {}", e)))?;
-
-        std::fs::write(config_path, config_content)
-            .map_err(|e| Error::ConfigError(format!("Failed to write config file: {}", e)))?;
-
-        Ok(())
-    }
-
     /// Get the data directory path, using default if not specified
     pub fn get_data_dir(&self) -> PathBuf {
         if let Some(data_dir) = &self.paths.data_dir {
@@ -406,15 +386,6 @@ external_tools:
             PathBuf::from(key_file)
         } else {
             self.get_data_dir().join("key.pem")
-        }
-    }
-
-    /// Get the trusted certificates directory path, using default if not specified
-    pub fn get_trusted_certs_dir(&self) -> PathBuf {
-        if let Some(trusted_certs_dir) = &self.paths.trusted_certs_dir {
-            PathBuf::from(trusted_certs_dir)
-        } else {
-            self.get_data_dir().join("trusted_certificates")
         }
     }
 

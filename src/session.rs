@@ -87,12 +87,11 @@ pub enum OutgoingMessage {
     TextMessage(String, u32), // channel message
     PrivMessage(String, u32), // private message
     Raw(u16, Vec<u8>),        // raw message type and payload
-    Ping,
 }
 
 pub struct WriterTask {
     sender: mpsc::Sender<OutgoingMessage>,
-    task: tokio::task::JoinHandle<Result<(), Error>>,
+    _task: tokio::task::JoinHandle<Result<(), Error>>,
 }
 
 pub struct Writer {
@@ -109,7 +108,10 @@ impl WriterTask {
             writer_task.run().await
         });
 
-        WriterTask { sender, task }
+        WriterTask {
+            sender,
+            _task: task,
+        }
     }
 }
 
@@ -148,10 +150,6 @@ impl Writer {
                     self.write_mumble_frame(protos::types::MESSAGE_TEXT_MESSAGE, payload)
                         .await?;
                 }
-                Some(OutgoingMessage::Ping) => {
-                    self.write_mumble_frame(protos::types::MESSAGE_PING, vec![])
-                        .await?;
-                }
                 Some(OutgoingMessage::Raw(msg_type, payload)) => {
                     self.write_mumble_frame(msg_type, payload).await?;
                 }
@@ -183,10 +181,6 @@ impl Writer {
 
         Ok(())
     }
-}
-
-pub struct SessionCommandTools {
-    mixer: AudioMixerTask,
 }
 
 pub struct Session {
@@ -236,12 +230,6 @@ impl Session {
         })?;
 
         Ok((sounds_dir, database_path, trusted_certs_dir))
-    }
-
-    /// Get the threebot configuration paths (using default ~/.threebot)
-    fn get_threebot_paths()
-    -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), Error> {
-        Self::get_threebot_paths_from_dir(None)
     }
 
     pub async fn new(options: ConnectionOptions) -> Result<Self, Error> {
@@ -299,9 +287,9 @@ impl Session {
 
         let config = ClientConfig::builder()
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(
-                verifier::PromptingCertVerifier::new(Some(trusted_certs_dir)),
-            ))
+            .with_custom_certificate_verifier(Arc::new(verifier::PromptingCertVerifier::new(Some(
+                trusted_certs_dir,
+            ))))
             .with_client_auth_cert(cert_chain, key_der)?;
 
         let server_name = if let Ok(ip_addr) = options.host.parse::<std::net::IpAddr>() {
@@ -436,32 +424,6 @@ impl Session {
             external_tools: options.external_tools,
             sound_history: std::sync::Mutex::new(std::collections::VecDeque::new()),
         })
-    }
-
-    /// Writes a Mumble frame to the stream.
-    ///
-    /// ## Arguments
-    /// * `stream` - The TLS stream to write to.
-    /// * `msg_type` - The type of the message to write.
-    /// * `payload` - The payload of the message to write.
-    ///
-    /// ## Returns
-    /// * `Ok(())` if the frame was written successfully.
-    /// * `Err(Error)` if there was an error writing the frame.
-    async fn write_mumble_frame(
-        writer: &mut tokio::io::WriteHalf<TlsStream<TcpStream>>,
-        msg_type: u16,
-        payload: Vec<u8>,
-    ) -> Result<(), Error> {
-        let msg_len = payload.len() as u32;
-        let mut header = [0u8; 6];
-        header[0..2].copy_from_slice(&msg_type.to_be_bytes());
-        header[2..6].copy_from_slice(&msg_len.to_be_bytes());
-
-        writer.write_all(&header).await?;
-        writer.write_all(&payload).await?;
-
-        Ok(())
     }
 
     /// Receives a Mumble frame from the stream.
@@ -786,10 +748,6 @@ impl Session {
         }
     }
 
-    pub fn writer(&self) -> &mpsc::Sender<OutgoingMessage> {
-        &self.writer.sender
-    }
-
     async fn execute_command_internal(
         &mut self,
         command_text: &str,
@@ -1074,11 +1032,6 @@ impl Session {
             warn!("Failed to execute random greeting sound command: {}", e);
         }
         Ok(())
-    }
-
-    /// Get the current behavior settings
-    pub fn behavior_settings(&self) -> &BehaviorSettings {
-        &self.behavior_settings
     }
 }
 
