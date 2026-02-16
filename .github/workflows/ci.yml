@@ -104,28 +104,28 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: bigbot
-            asset_name: bigbot-linux-x86_64
+            artifact_name: threebot
+            asset_name: threebot-linux-x86_64
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            artifact_name: bigbot
-            asset_name: bigbot-linux-x86_64-ubuntu22
+            artifact_name: threebot
+            asset_name: threebot-linux-x86_64-ubuntu22
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: bigbot
-            asset_name: bigbot-linux-aarch64
+            artifact_name: threebot
+            asset_name: threebot-linux-aarch64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: bigbot.exe
-            asset_name: bigbot-windows-x86_64.exe
+            artifact_name: threebot.exe
+            asset_name: threebot-windows-x86_64.exe
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: bigbot
-            asset_name: bigbot-macos-x86_64
+            artifact_name: threebot
+            asset_name: threebot-macos-x86_64
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: bigbot
-            asset_name: bigbot-macos-aarch64
+            artifact_name: threebot
+            asset_name: threebot-macos-aarch64
 
     steps:
     - name: Checkout repository
