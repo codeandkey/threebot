@@ -309,20 +309,25 @@ impl AudioMixerControl {
         } else {
             log::info!("Using direct ffmpeg conversion (no effects)");
             // No effects, use original file directly
+            let normalize_filter =
+                crate::audio::effects::pre_effect_normalize_filter(&self.audio_effects);
+            let sample_rate = SAMPLE_RATE.to_string();
+            let channels = CHANNELS.to_string();
+
             let mut child = Command::new("ffmpeg")
-                .args([
-                    "-i",
-                    file,
-                    "-f",
-                    "s16le",
-                    "-acodec",
-                    "pcm_s16le",
-                    "-ar",
-                    &SAMPLE_RATE.to_string(),
-                    "-ac",
-                    &CHANNELS.to_string(),
-                    "-",
-                ])
+                .arg("-i")
+                .arg(file)
+                .arg("-af")
+                .arg(normalize_filter)
+                .arg("-f")
+                .arg("s16le")
+                .arg("-acodec")
+                .arg("pcm_s16le")
+                .arg("-ar")
+                .arg(sample_rate)
+                .arg("-ac")
+                .arg(channels)
+                .arg("-")
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped()) // Capture stderr for potential error reporting

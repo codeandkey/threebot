@@ -3,6 +3,22 @@ use std::path::Path;
 use std::process::Stdio;
 use tokio::io::AsyncBufReadExt;
 
+/// Input normalization filter applied before any user-selected effects.
+/// One-pass loudness normalization suitable for realtime processing.
+pub fn pre_effect_normalize_filter(config: &AudioEffectSettings) -> String {
+    format!(
+        "loudnorm=I={}:LRA={}:TP={}:linear={}",
+        config.loudnorm_target_lufs,
+        config.loudnorm_lra,
+        config.loudnorm_true_peak_db,
+        if config.loudnorm_linear {
+            "true"
+        } else {
+            "false"
+        }
+    )
+}
+
 /// Available audio effects that can be applied to sounds
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioEffect {
@@ -457,18 +473,25 @@ impl AudioEffectsProcessor {
 
         // Stage 1: Start with ffmpeg for format conversion to PCM, optionally with effects
         if !has_reverb && !ffmpeg_effects.is_empty() {
-            // If we only have ffmpeg effects and no reverb, apply them all in the first stage
-            let filter_chain = ffmpeg_effects
-                .iter()
-                .map(|effect| effect.to_ffmpeg_filter(&self.config))
-                .collect::<Vec<_>>()
-                .join(",");
+            // If we only have ffmpeg effects and no reverb, apply normalization first, then effects.
+            let mut filters = vec![pre_effect_normalize_filter(&self.config)];
+            filters.extend(
+                ffmpeg_effects
+                    .iter()
+                    .map(|effect| effect.to_ffmpeg_filter(&self.config))
+                    .collect::<Vec<_>>(),
+            );
+            let filter_chain = filters.join(",");
             log::info!("Stage 1: ffmpeg with effects filter: {}", filter_chain);
             pipeline.add_ffmpeg_stage(ffmpeg_cmd, Some(filter_chain), "s16le")?;
         } else {
-            // Always convert to PCM s16le - whether we have reverb or no effects
-            log::info!("Stage 1: ffmpeg format conversion to PCM s16le");
-            pipeline.add_ffmpeg_stage(ffmpeg_cmd, None, "s16le")?;
+            // Always normalize input before subsequent stages/effects.
+            log::info!("Stage 1: ffmpeg input normalization and format conversion to PCM s16le");
+            pipeline.add_ffmpeg_stage(
+                ffmpeg_cmd,
+                Some(pre_effect_normalize_filter(&self.config)),
+                "s16le",
+            )?;
         }
 
         // Stage 2: Add sox stage if reverb is needed
@@ -550,15 +573,12 @@ mod tests {
             "bass".to_string(),
         ];
         let effects = parse_effects(&input).unwrap();
-        assert_eq!(
-            effects,
-            vec![
-                AudioEffect::Loud,
-                AudioEffect::Fast,
-                AudioEffect::Reverb,
-                AudioEffect::Bass
-            ]
-        );
+        assert_eq!(effects, vec![
+            AudioEffect::Loud,
+            AudioEffect::Fast,
+            AudioEffect::Reverb,
+            AudioEffect::Bass
+        ]);
 
         let invalid = vec!["loud".to_string(), "invalid".to_string()];
         assert!(parse_effects(&invalid).is_err());
@@ -601,6 +621,10 @@ mod tests {
             echo_delay_ms: 300,
             echo_feedback: 0.3,
             muffle_cutoff_frequency_hz: 1000.0,
+            loudnorm_target_lufs: -18.0,
+            loudnorm_lra: 11.0,
+            loudnorm_true_peak_db: -1.5,
+            loudnorm_linear: true,
         };
         let _processor = AudioEffectsProcessor::new(config).unwrap();
 
@@ -650,6 +674,10 @@ mod tests {
             echo_delay_ms: 300,
             echo_feedback: 0.3,
             muffle_cutoff_frequency_hz: 1000.0,
+            loudnorm_target_lufs: -18.0,
+            loudnorm_lra: 11.0,
+            loudnorm_true_peak_db: -1.5,
+            loudnorm_linear: true,
         };
 
         assert_eq!(AudioEffect::Loud.to_ffmpeg_filter(&config), "volume=6dB");

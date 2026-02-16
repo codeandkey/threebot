@@ -90,6 +90,34 @@ pub struct AudioEffectSettings {
     pub echo_feedback: f32,
     /// Low-pass filter cutoff frequency for 'muffle' effect (in Hz)
     pub muffle_cutoff_frequency_hz: f32,
+    /// Loudnorm target integrated loudness (in LUFS) for pre-effect normalization
+    #[serde(default = "default_loudnorm_target_lufs")]
+    pub loudnorm_target_lufs: f32,
+    /// Loudnorm loudness range target (in LU) for pre-effect normalization
+    #[serde(default = "default_loudnorm_lra")]
+    pub loudnorm_lra: f32,
+    /// Loudnorm true peak target (in dBTP) for pre-effect normalization
+    #[serde(default = "default_loudnorm_true_peak_db")]
+    pub loudnorm_true_peak_db: f32,
+    /// Whether loudnorm runs in linear mode for pre-effect normalization
+    #[serde(default = "default_loudnorm_linear")]
+    pub loudnorm_linear: bool,
+}
+
+fn default_loudnorm_target_lufs() -> f32 {
+    -18.0
+}
+
+fn default_loudnorm_lra() -> f32 {
+    11.0
+}
+
+fn default_loudnorm_true_peak_db() -> f32 {
+    -1.5
+}
+
+fn default_loudnorm_linear() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,6 +222,10 @@ impl Default for BotConfig {
                 echo_delay_ms: 300,
                 echo_feedback: 0.3,
                 muffle_cutoff_frequency_hz: 1000.0, // Default cutoff frequency for low-pass filter
+                loudnorm_target_lufs: default_loudnorm_target_lufs(),
+                loudnorm_lra: default_loudnorm_lra(),
+                loudnorm_true_peak_db: default_loudnorm_true_peak_db(),
+                loudnorm_linear: default_loudnorm_linear(),
             },
             paths: PathSettings {
                 data_dir: None,
@@ -319,6 +351,14 @@ audio_effects:
   echo_feedback: 0.3
   # Low-pass filter cutoff frequency for 'muffle' effect (in Hz)
   muffle_cutoff_frequency_hz: 1000
+  # Pre-effect loudness normalization target integrated loudness (LUFS)
+  loudnorm_target_lufs: -18.0
+  # Pre-effect loudness normalization target loudness range (LU)
+  loudnorm_lra: 11.0
+  # Pre-effect loudness normalization target true peak (dBTP)
+  loudnorm_true_peak_db: -1.5
+  # Use linear loudnorm mode (recommended for realtime one-pass processing)
+  loudnorm_linear: true
 
 # File and directory paths
 paths:
