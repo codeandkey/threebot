@@ -24,9 +24,6 @@ use crate::{
 use effects::{AudioEffect, AudioEffectsProcessor};
 
 pub mod effects;
-pub mod normalizer;
-
-use normalizer::VolumeNormalizer;
 
 const SAMPLE_RATE: usize = 48000;
 const CHANNELS: usize = 2;
@@ -67,7 +64,6 @@ pub struct AudioMixer {
     encoder: Encoder,
     seq: u32,
     volume: f32,
-    normalizer: Option<VolumeNormalizer>,
     // Pre-allocated buffers to reduce allocations in hot path
     mixed_buffer: Vec<i16>,
     temp_buffer: Vec<i16>,
@@ -99,16 +95,6 @@ impl AudioMixer {
         behavior_settings: &BehaviorSettings,
         _audio_effects: &AudioEffectSettings,
     ) -> Self {
-        let normalizer = if behavior_settings.volume_normalization_enabled {
-            Some(VolumeNormalizer::new(
-                behavior_settings.target_loudness_lufs,
-                behavior_settings.max_normalization_gain_db,
-                SAMPLE_RATE,
-            ))
-        } else {
-            None
-        };
-
         let mixer = AudioMixer {
             streams: Arc::new(Mutex::new(Vec::new())),
             writer_sender,
@@ -120,7 +106,6 @@ impl AudioMixer {
             .unwrap(),
             seq: 0,
             volume: behavior_settings.volume,
-            normalizer,
             // Pre-allocate buffers for better performance
             mixed_buffer: vec![0; FRAME_SAMPLES],
             temp_buffer: Vec::with_capacity(FRAME_SAMPLES),
@@ -190,11 +175,6 @@ impl AudioMixer {
             // If no active streams, don't bother encoding
             if active == 0 {
                 continue;
-            }
-
-            // Apply volume normalization if enabled
-            if let Some(ref mut normalizer) = self.normalizer {
-                normalizer.process(&mut self.mixed_buffer);
             }
 
             // Apply global volume multiplier to the mixed audio

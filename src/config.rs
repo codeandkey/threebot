@@ -48,12 +48,6 @@ pub struct BehaviorSettings {
     pub allow_private_commands: bool,
     /// Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
     pub volume: f32,
-    /// Enable volume normalization to maintain consistent loudness levels
-    pub volume_normalization_enabled: bool,
-    /// Target loudness level for normalization (in LUFS, typically -23 to -16)
-    pub target_loudness_lufs: f32,
-    /// Maximum gain boost allowed during normalization (in dB, prevents over-amplification)
-    pub max_normalization_gain_db: f32,
     /// Enable random modifiers when playing sounds
     pub random_modifiers_enabled: bool,
     /// Probability (0.0-1.0) for each round of random modifier application
@@ -201,9 +195,6 @@ impl Default for BotConfig {
                 auto_farewells: FarewellMode::Custom,
                 allow_private_commands: true,
                 volume: 1.0,
-                volume_normalization_enabled: false,
-                target_loudness_lufs: -18.0, // Good balance for voice chat
-                max_normalization_gain_db: 12.0, // Prevent excessive amplification
                 random_modifiers_enabled: true,
                 random_modifier_chance: 0.05, // 5% chance per round
                 random_modifier_rounds: 2,
@@ -309,12 +300,6 @@ behavior:
   allow_private_commands: true
   # Global volume multiplier for all outgoing audio (1.0 = normal, 0.5 = half volume, 2.0 = double volume)
   volume: 1.0
-  # Enable volume normalization to maintain consistent loudness levels
-  volume_normalization_enabled: false
-  # Target loudness level for normalization (in LUFS, typically -23 to -16)
-  target_loudness_lufs: -18.0
-  # Maximum gain boost allowed during normalization (in dB, prevents over-amplification)
-  max_normalization_gain_db: 12.0
   # Enable random audio effects when playing sounds
   random_modifiers_enabled: true
   # Probability (0.0-1.0) for each round of random modifier application (0.05 = 5% chance)
