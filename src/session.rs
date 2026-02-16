@@ -300,7 +300,7 @@ impl Session {
         let config = ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(
-                verifier::PromptingCertVerifier::with_trust_dir(Some(trusted_certs_dir)),
+                verifier::PromptingCertVerifier::new(Some(trusted_certs_dir)),
             ))
             .with_client_auth_cert(cert_chain, key_der)?;
 

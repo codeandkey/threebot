@@ -14,17 +14,6 @@ impl UserSettingsManager {
         Self { db }
     }
 
-    fn parse_timestamp(value: &str) -> Result<DateTime<Utc>, Error> {
-        chrono::DateTime::parse_from_rfc3339(value)
-            .map(|dt| dt.with_timezone(&Utc))
-            .map_err(|e| {
-                Error::DatabaseError(format!(
-                    "Invalid user settings timestamp '{}': {}",
-                    value, e
-                ))
-            })
-    }
-
     /// Set a user setting (bind, greeting, farewell)
     pub async fn set_user_setting(
         &self,
@@ -123,91 +112,6 @@ impl UserSettingsManager {
         })
         .await
         .map_err(|e| Error::DatabaseError(format!("Delete user setting task failed: {}", e)))?
-    }
-
-    /// Check if a user has a specific setting
-    pub async fn user_has_setting(
-        &self,
-        username: &str,
-        setting_type: SettingType,
-    ) -> Result<bool, Error> {
-        let pool = self.db.clone();
-        let id = format!("{}:{}", username, setting_type.as_str());
-
-        tokio::task::spawn_blocking(move || -> Result<bool, Error> {
-            let conn = pool
-                .get()
-                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
-            let count: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM user_settings WHERE id = ?1",
-                    params![id],
-                    |row| row.get(0),
-                )
-                .map_err(|e| {
-                    Error::DatabaseError(format!("Failed to check user setting existence: {}", e))
-                })?;
-            Ok(count > 0)
-        })
-        .await
-        .map_err(|e| Error::DatabaseError(format!("Has user setting task failed: {}", e)))?
-    }
-
-    /// Get all settings for a user
-    pub async fn get_all_user_settings(
-        &self,
-        username: &str,
-    ) -> Result<Vec<user_settings_entity::Model>, Error> {
-        let pool = self.db.clone();
-        let username = username.to_string();
-
-        tokio::task::spawn_blocking(move || -> Result<Vec<user_settings_entity::Model>, Error> {
-            let conn = pool
-                .get()
-                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, username, setting_type, setting_value, created_at, updated_at
-                     FROM user_settings WHERE username = ?1",
-                )
-                .map_err(|e| {
-                    Error::DatabaseError(format!("Failed to prepare user settings query: {}", e))
-                })?;
-
-            let rows = stmt
-                .query_map(params![username], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, String>(5)?,
-                    ))
-                })
-                .map_err(|e| {
-                    Error::DatabaseError(format!("Failed to query user settings: {}", e))
-                })?;
-
-            let mut settings = Vec::new();
-            for row in rows {
-                let (id, username, setting_type, setting_value, created_at_raw, updated_at_raw) =
-                    row.map_err(|e| {
-                        Error::DatabaseError(format!("Failed to read user setting row: {}", e))
-                    })?;
-                settings.push(user_settings_entity::Model {
-                    id,
-                    username,
-                    setting_type,
-                    setting_value,
-                    created_at: Self::parse_timestamp(&created_at_raw)?,
-                    updated_at: Self::parse_timestamp(&updated_at_raw)?,
-                });
-            }
-            Ok(settings)
-        })
-        .await
-        .map_err(|e| Error::DatabaseError(format!("List user settings task failed: {}", e)))?
     }
 
     /// Convenience methods for specific setting types

@@ -18,11 +18,7 @@ pub struct PromptingCertVerifier {
 }
 
 impl PromptingCertVerifier {
-    pub fn new() -> Self {
-        Self::with_trust_dir(None)
-    }
-
-    pub fn with_trust_dir(trust_dir: Option<PathBuf>) -> Self {
+    pub fn new(trust_dir: Option<PathBuf>) -> Self {
         let trusted_certs_dir = trust_dir.unwrap_or_else(|| {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))

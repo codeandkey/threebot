@@ -36,33 +36,11 @@ impl DatabaseManager {
         }
 
         let manager = Self { pool };
-        manager.migrate_all().await?;
         Ok(manager)
     }
 
     /// Creates a clone of the database pool for use in managers
     pub fn pool_clone(&self) -> DbPool {
         self.pool.clone()
-    }
-
-    /// Runs all database migrations
-    async fn migrate_all(&self) -> Result<(), Error> {
-        super::migrations::run_all_migrations(&self.pool).await
-    }
-
-    /// Checks if the database is healthy
-    pub async fn health_check(&self) -> Result<(), Error> {
-        let pool = self.pool.clone();
-        tokio::task::spawn_blocking(move || -> Result<(), Error> {
-            let conn = pool.get().map_err(|e| {
-                Error::DatabaseError(format!("Database health check failed: {}", e))
-            })?;
-            conn.query_row("SELECT 1", [], |_row| Ok(())).map_err(|e| {
-                Error::DatabaseError(format!("Database health check failed: {}", e))
-            })?;
-            Ok(())
-        })
-        .await
-        .map_err(|e| Error::DatabaseError(format!("Database health check task failed: {}", e)))?
     }
 }
