@@ -26,7 +26,7 @@ impl PromptingCertVerifier {
         let trusted_certs_dir = trust_dir.unwrap_or_else(|| {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join(".bigbot")
+                .join(".threebot")
                 .join("trusted_certificates")
         });
 

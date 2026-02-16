@@ -1,72 +1,50 @@
+use crate::database::connection::DbPool;
 use crate::error::Error;
-use sea_orm::*;
 
 /// Runs all database migrations
-pub async fn run_all_migrations(db: &DatabaseConnection) -> Result<(), Error> {
-    migrate_sounds_table(db).await?;
-    migrate_aliases_table(db).await?;
-    info!("All database migrations completed successfully");
-    Ok(())
-}
+pub async fn run_all_migrations(pool: &DbPool) -> Result<(), Error> {
+    let pool = pool.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), Error> {
+        let conn = pool
+            .get()
+            .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
 
-/// Migrates the sounds table
-async fn migrate_sounds_table(db: &DatabaseConnection) -> Result<(), Error> {
-    use super::entities::sounds;
-    use sea_orm::Schema;
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS sounds (
+                code TEXT PRIMARY KEY,
+                author TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                source_url TEXT NULL,
+                start_time TEXT NOT NULL,
+                length REAL NOT NULL
+            );
 
-    let builder = db.get_database_backend();
-    let schema = Schema::new(builder);
+            CREATE TABLE IF NOT EXISTS aliases (
+                name TEXT PRIMARY KEY,
+                author TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                commands TEXT NOT NULL
+            );
 
-    // Create the sounds table if it doesn't exist
-    let stmt = schema.create_table_from_entity(sounds::Entity);
+            CREATE TABLE IF NOT EXISTS user_settings (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                setting_type TEXT NOT NULL,
+                setting_value TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
 
-    match db.execute(builder.build(&stmt)).await {
-        Ok(_) => {
-            info!("Sounds table migration completed successfully");
-            Ok(())
-        }
-        Err(e) => {
-            // Ignore "table already exists" errors
-            if e.to_string().contains("already exists") {
-                info!("Sounds table already exists");
-                Ok(())
-            } else {
-                Err(Error::DatabaseError(format!(
-                    "Failed to create sounds table: {}",
-                    e
-                )))
-            }
-        }
-    }
-}
+            CREATE INDEX IF NOT EXISTS idx_user_settings_username
+            ON user_settings(username);
+            ",
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to run database migrations: {}", e)))?;
 
-/// Migrates the aliases table
-async fn migrate_aliases_table(db: &DatabaseConnection) -> Result<(), Error> {
-    use super::entities::aliases;
-    use sea_orm::Schema;
-
-    let builder = db.get_database_backend();
-    let schema = Schema::new(builder);
-
-    // Create the aliases table if it doesn't exist
-    let stmt = schema.create_table_from_entity(aliases::Entity);
-
-    match db.execute(builder.build(&stmt)).await {
-        Ok(_) => {
-            info!("Aliases table migration completed successfully");
-            Ok(())
-        }
-        Err(e) => {
-            // Ignore "table already exists" errors
-            if e.to_string().contains("already exists") {
-                info!("Aliases table already exists");
-                Ok(())
-            } else {
-                Err(Error::DatabaseError(format!(
-                    "Failed to create aliases table: {}",
-                    e
-                )))
-            }
-        }
-    }
+        info!("All database migrations completed successfully");
+        Ok(())
+    })
+    .await
+    .map_err(|e| Error::DatabaseError(format!("Migration task failed: {}", e)))?
 }

@@ -23,23 +23,23 @@ impl Command for AliasCommand {
                 }
                 "help" => {
                     // Show help
-                    tools.reply("🔧 Alias Command Help\n\n\
-                        • `!alias` or `!alias list` - List first page of aliases\n\
-                        • `!alias list <page>` - List aliases by page (20 per page)\n\
-                        • `!alias search <term> [page]` - Search aliases\n\
-                        • `!alias create <name> <commands...>` - Create an alias\n\
-                        • `!alias <name> <commands...>` - Create an alias\n\
-                        • `!alias remove <name>` - Remove an alias\n\
-                        • `!alias help` - Show this help\n\n\
+                    tools.reply(" Alias Command Help\n\n\
+                         `!alias` or `!alias list` - List first page of aliases\n\
+                         `!alias list <page>` - List aliases by page (20 per page)\n\
+                         `!alias search <term> [page]` - Search aliases\n\
+                         `!alias create <name> <commands...>` - Create an alias\n\
+                         `!alias <name> <commands...>` - Create an alias\n\
+                         `!alias remove <name>` - Remove an alias\n\
+                         `!alias help` - Show this help\n\n\
                         Variable substitution:\n\
-                        • `$@` - All arguments passed to alias\n\
-                        • `$1`, `$2`, etc. - Individual arguments\n\
-                        • `$#` - Number of arguments\n\
-                        • `$recent` - Most recently played sound code\n\n\
+                         `$@` - All arguments passed to alias\n\
+                         `$1`, `$2`, etc. - Individual arguments\n\
+                         `$#` - Number of arguments\n\
+                         `$recent` - Most recently played sound code\n\n\
                         Examples:\n\
-                        • `!alias greet sound play hello; sound play $1`\n\
-                        • `!alias welcome greet $@; sound play fanfare`\n\
-                        • `!alias again sound play $recent`").await
+                         `!alias greet sound play hello; sound play $1`\n\
+                         `!alias welcome greet $@; sound play fanfare`\n\
+                         `!alias again sound play $recent`").await
                 }
                 _ => {
                     tools.reply("Usage: !alias [list|help] or !alias <name> <commands...> or !alias remove <name>").await
@@ -143,19 +143,19 @@ impl AliasCommand {
             match alias_manager.create_alias(name, author, commands).await {
                 Ok(_) => {
                     tools
-                        .reply(&format!("✅ Alias '{}' created successfully", name))
+                        .reply(&format!(" Alias '{}' created successfully", name))
                         .await?;
                 }
                 Err(e) => {
                     tools
-                        .reply(&format!("❌ Failed to create alias: {}", e))
+                        .reply(&format!(" Failed to create alias: {}", e))
                         .await?;
                 }
             }
             return Ok(());
         }
 
-        tools.reply("❌ Alias manager not available").await
+        tools.reply(" Alias manager not available").await
     }
 
     /// Lists all aliases
@@ -165,12 +165,12 @@ impl AliasCommand {
             match alias_manager.list_aliases().await {
                 Ok(aliases) => {
                     if aliases.is_empty() {
-                        tools.reply("📋 No aliases defined").await?;
+                        tools.reply(" No aliases defined").await?;
                     } else {
-                        let mut response = String::from("📋 Aliases:\n");
+                        let mut response = String::from(" Aliases:\n");
                         for alias in aliases {
                             response.push_str(&format!(
-                                "• **{}** (by {}): `{}`\n",
+                                " **{}** (by {}): `{}`\n",
                                 alias.name, alias.author, alias.commands
                             ));
                         }
@@ -179,14 +179,14 @@ impl AliasCommand {
                 }
                 Err(e) => {
                     tools
-                        .reply(&format!("❌ Failed to list aliases: {}", e))
+                        .reply(&format!(" Failed to list aliases: {}", e))
                         .await?;
                 }
             }
             return Ok(());
         }
 
-        tools.reply("❌ Alias manager not available").await
+        tools.reply(" Alias manager not available").await
     }
 
     /// Lists aliases with pagination
@@ -200,9 +200,9 @@ impl AliasCommand {
                 Ok(aliases) => {
                     if aliases.is_empty() {
                         if page == 0 {
-                            tools.reply("📋 No aliases defined").await?;
+                            tools.reply(" No aliases defined").await?;
                         } else {
-                            tools.reply("📋 No aliases found on this page").await?;
+                            tools.reply(" No aliases found on this page").await?;
                         }
                     } else {
                         // Get total count for pagination info
@@ -210,7 +210,7 @@ impl AliasCommand {
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
 
                         let mut response =
-                            format!("📋 Aliases (Page {} of {})\n\n", page + 1, total_pages);
+                            format!(" Aliases (Page {} of {})\n\n", page + 1, total_pages);
 
                         // Prepare table data
                         let headers = &["Name", "Author", "Commands"];
@@ -227,12 +227,12 @@ impl AliasCommand {
 
                         response.push_str("<div style=\"text-align: center;\">");
                         response.push_str(&tools.create_html_table_paginated(
-                            headers, 
-                            &rows, 
+                            headers,
+                            &rows,
                             Some((page + 1) as usize), // Convert 0-based to 1-based
-                            Some(20), 
+                            Some(20),
                             Some(total_count as usize),
-                            "!alias list"
+                            "!alias list",
                         ));
                         response.push_str("</div>");
                         tools.reply_html(&response).await?;
@@ -240,14 +240,14 @@ impl AliasCommand {
                 }
                 Err(e) => {
                     tools
-                        .reply(&format!("❌ Failed to list aliases: {}", e))
+                        .reply(&format!(" Failed to list aliases: {}", e))
                         .await?;
                 }
             }
             return Ok(());
         }
 
-        tools.reply("❌ Alias manager not available").await
+        tools.reply(" Alias manager not available").await
     }
 
     /// Searches aliases with pagination
@@ -263,12 +263,12 @@ impl AliasCommand {
                     if aliases.is_empty() {
                         if page == 0 {
                             tools
-                                .reply(&format!("🔍 No aliases found matching '{}'", search_term))
+                                .reply(&format!(" No aliases found matching '{}'", search_term))
                                 .await?;
                         } else {
                             tools
                                 .reply(&format!(
-                                    "🔍 No aliases found matching '{}' on this page",
+                                    " No aliases found matching '{}' on this page",
                                     search_term
                                 ))
                                 .await?;
@@ -282,7 +282,7 @@ impl AliasCommand {
                         let total_pages = (total_count + 19) / 20; // 20 per page, round up
 
                         let mut response = format!(
-                            "🔍 Aliases matching '{}' (Page {} of {})\n\n",
+                            " Aliases matching '{}' (Page {} of {})\n\n",
                             search_term,
                             page + 1,
                             total_pages
@@ -303,12 +303,12 @@ impl AliasCommand {
 
                         response.push_str("<div style=\"text-align: center;\">");
                         response.push_str(&tools.create_html_table_paginated(
-                            headers, 
-                            &rows, 
+                            headers,
+                            &rows,
                             Some((page + 1) as usize), // Convert 0-based to 1-based
-                            Some(20), 
+                            Some(20),
                             Some(total_count as usize),
-                            &format!("!alias search {}", search_term)
+                            &format!("!alias search {}", search_term),
                         ));
                         response.push_str("</div>");
                         tools.reply_html(&response).await?;
@@ -316,14 +316,14 @@ impl AliasCommand {
                 }
                 Err(e) => {
                     tools
-                        .reply(&format!("❌ Failed to search aliases: {}", e))
+                        .reply(&format!(" Failed to search aliases: {}", e))
                         .await?;
                 }
             }
             return Ok(());
         }
 
-        tools.reply("❌ Alias manager not available").await
+        tools.reply(" Alias manager not available").await
     }
 
     /// Removes an alias
@@ -333,23 +333,21 @@ impl AliasCommand {
             match alias_manager.delete_alias(name).await {
                 Ok(true) => {
                     tools
-                        .reply(&format!("✅ Alias '{}' removed successfully", name))
+                        .reply(&format!(" Alias '{}' removed successfully", name))
                         .await?;
                 }
                 Ok(false) => {
-                    tools
-                        .reply(&format!("❌ Alias '{}' not found", name))
-                        .await?;
+                    tools.reply(&format!(" Alias '{}' not found", name)).await?;
                 }
                 Err(e) => {
                     tools
-                        .reply(&format!("❌ Failed to remove alias: {}", e))
+                        .reply(&format!(" Failed to remove alias: {}", e))
                         .await?;
                 }
             }
             return Ok(());
         }
 
-        tools.reply("❌ Alias manager not available").await
+        tools.reply(" Alias manager not available").await
     }
 }

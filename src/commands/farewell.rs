@@ -17,7 +17,7 @@ impl Command for FarewellCommand {
             Some(id) => id,
             None => {
                 tools
-                    .reply("❌ Unable to identify user for farewell command")
+                    .reply(" Unable to identify user for farewell command")
                     .await?;
                 return Ok(());
             }
@@ -29,14 +29,14 @@ impl Command for FarewellCommand {
                 Some(name) if !name.is_empty() => name.clone(),
                 _ => {
                     tools
-                        .reply("❌ Unable to get valid username for farewell command")
+                        .reply(" Unable to get valid username for farewell command")
                         .await?;
                     return Ok(());
                 }
             },
             None => {
                 tools
-                    .reply("❌ Unable to find user information for farewell command")
+                    .reply(" Unable to find user information for farewell command")
                     .await?;
                 return Ok(());
             }
@@ -48,24 +48,22 @@ impl Command for FarewellCommand {
                 match user_settings_manager.clear_farewell(&username).await {
                     Ok(true) => {
                         tools
-                            .reply("✅ Your farewell command has been removed")
+                            .reply(" Your farewell command has been removed")
                             .await?;
                     }
                     Ok(false) => {
                         tools
-                            .reply("❌ You don't have a farewell command set to remove")
+                            .reply(" You don't have a farewell command set to remove")
                             .await?;
                     }
                     Err(e) => {
                         tools
-                            .reply(&format!("❌ Error removing farewell command: {}", e))
+                            .reply(&format!(" Error removing farewell command: {}", e))
                             .await?;
                     }
                 }
             } else {
-                tools
-                    .reply("❌ User settings manager not available")
-                    .await?;
+                tools.reply(" User settings manager not available").await?;
             }
         } else {
             // Set the user's farewell command
@@ -84,22 +82,17 @@ impl Command for FarewellCommand {
                     Ok(()) => {
                         // Show the user what was actually stored (with the !)
                         tools
-                            .reply(&format!(
-                                "✅ Farewell command set to: `{}`",
-                                farewell_command
-                            ))
+                            .reply(&format!(" Farewell command set to: `{}`", farewell_command))
                             .await?;
                     }
                     Err(e) => {
                         tools
-                            .reply(&format!("❌ Error setting farewell command: {}", e))
+                            .reply(&format!(" Error setting farewell command: {}", e))
                             .await?;
                     }
                 }
             } else {
-                tools
-                    .reply("❌ User settings manager not available")
-                    .await?;
+                tools.reply(" User settings manager not available").await?;
             }
         }
 

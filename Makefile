@@ -1,9 +1,9 @@
-# Big Bot Development Makefile
+# Threebot Development Makefile
 .PHONY: help build test clean install dev fmt clippy audit release docker docs bench
 
 # Default target
 help: ## Show this help message
-	@echo "Big Bot Development Commands:"
+	@echo "Threebot Development Commands:"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 	@echo ""
@@ -58,7 +58,7 @@ audit: ## Security audit of dependencies
 clean: ## Clean build artifacts
 	cargo clean
 	rm -rf target/
-	rm -rf ~/.bigbot/database.sql*  # Clean test database
+	rm -rf ~/.THREEBOT/database.sql*  # Clean test database
 
 clean-all: clean ## Clean everything including caches
 	rm -rf ~/.cargo/registry/cache/
@@ -80,11 +80,11 @@ setup: install-deps ## Full development setup
 # Release
 release: ## Build optimized release binary
 	cargo build --release --locked
-	@echo "Release binary available at: target/release/bigbot"
+	@echo "Release binary available at: target/release/THREEBOT"
 
 install: release ## Install to system PATH
-	sudo cp target/release/bigbot /usr/local/bin/
-	@echo "Installed to /usr/local/bin/bigbot"
+	sudo cp target/release/THREEBOT /usr/local/bin/
+	@echo "Installed to /usr/local/bin/THREEBOT"
 
 # Docker
 docker-build: ## Build Docker image
@@ -92,7 +92,7 @@ docker-build: ## Build Docker image
 
 docker-run: docker-build ## Build and run Docker container
 	docker run --rm -it \
-		-v $(PWD)/data:/app/.bigbot \
+		-v $(PWD)/data:/app/.THREEBOT \
 		big-bot:dev
 
 docker-compose-up: ## Start with docker-compose
@@ -113,19 +113,19 @@ docs-all: ## Generate documentation including dependencies
 
 # Database management
 db-reset: ## Reset development database
-	rm -f ~/.bigbot/database.sql*
+	rm -f ~/.THREEBOT/database.sql*
 	@echo "Database reset. Will be recreated on next run."
 
 # Configuration
 config-example: ## Generate example configuration
-	mkdir -p ~/.bigbot
+	mkdir -p ~/.THREEBOT
 	cargo run -- --help > /dev/null 2>&1 || true
-	@echo "Example configuration created at ~/.bigbot/config.yml"
+	@echo "Example configuration created at ~/.THREEBOT/config.yml"
 
 # Performance and profiling
 profile: ## Profile the application (requires perf)
 	cargo build --release
-	perf record --call-graph=dwarf ./target/release/bigbot --help
+	perf record --call-graph=dwarf ./target/release/THREEBOT --help
 	perf report
 
 flamegraph: ## Generate flamegraph (requires cargo-flamegraph)
@@ -168,9 +168,9 @@ build-macos: ## Build for macOS (cross-compilation)
 # Utility commands
 size: ## Show binary size information
 	@echo "Debug binary:"
-	@ls -lh target/debug/bigbot 2>/dev/null || echo "Debug binary not built"
+	@ls -lh target/debug/THREEBOT 2>/dev/null || echo "Debug binary not built"
 	@echo "Release binary:"
-	@ls -lh target/release/bigbot 2>/dev/null || echo "Release binary not built"
+	@ls -lh target/release/THREEBOT 2>/dev/null || echo "Release binary not built"
 
 deps-tree: ## Show dependency tree
 	cargo tree
@@ -183,7 +183,7 @@ deps-licenses: ## Show dependency licenses
 mumble-server: ## Start local Mumble server (requires Docker)
 	docker run -d --name test-mumble \
 		-p 64738:64738 \
-		-e MUMBLE_CONFIG_welcometext="Big Bot Test Server" \
+		-e MUMBLE_CONFIG_welcometext="Threebot Test Server" \
 		mumblevoip/mumble-server:latest
 
 mumble-server-stop: ## Stop local Mumble server
@@ -215,3 +215,4 @@ help-deploy: ## Show deployment help
 	@echo "  1. make release        # Build release binary"
 	@echo "  2. make docker-build   # Build Docker image"
 	@echo "  3. make install        # Install to system"
+

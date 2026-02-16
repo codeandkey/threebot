@@ -1,15 +1,25 @@
+use crate::database::connection::DbPool;
 use crate::database::entities::aliases as alias_entity;
 use crate::error::Error;
-use sea_orm::*;
+use chrono::{DateTime, Utc};
+use rusqlite::{OptionalExtension, params};
 
 pub struct AliasManager {
-    db: DatabaseConnection,
+    db: DbPool,
 }
 
 impl AliasManager {
-    /// Creates a new alias manager with a database connection
-    pub fn new(database: DatabaseConnection) -> Self {
+    /// Creates a new alias manager with a database pool
+    pub fn new(database: DbPool) -> Self {
         Self { db: database }
+    }
+
+    fn parse_created_at(value: &str) -> Result<DateTime<Utc>, Error> {
+        chrono::DateTime::parse_from_rfc3339(value)
+            .map(|dt| dt.with_timezone(&Utc))
+            .map_err(|e| {
+                Error::DatabaseError(format!("Invalid alias timestamp '{}': {}", value, e))
+            })
     }
 
     /// Creates a new alias
@@ -19,60 +29,163 @@ impl AliasManager {
         author: &str,
         commands: &str,
     ) -> Result<(), Error> {
-        let alias = alias_entity::ActiveModel::new_for_insert(
-            name.to_string(),
-            author.to_string(),
-            commands.to_string(),
-        );
+        let pool = self.db.clone();
+        let name = name.to_string();
+        let author = author.to_string();
+        let commands = commands.to_string();
 
-        alias_entity::Entity::insert(alias)
-            .exec(&self.db)
-            .await
-            .map_err(|e| {
-                if e.to_string().contains("UNIQUE constraint failed") {
-                    Error::InvalidArgument(format!("Alias '{}' already exists", name))
-                } else {
-                    Error::DatabaseError(format!("Failed to create alias: {}", e))
+        tokio::task::spawn_blocking(move || -> Result<(), Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let created_at = Utc::now().to_rfc3339();
+            let result = conn.execute(
+                "INSERT INTO aliases (name, author, created_at, commands) VALUES (?1, ?2, ?3, ?4)",
+                params![name, author, created_at, commands],
+            );
+
+            match result {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    if e.to_string().contains("UNIQUE constraint failed") {
+                        Err(Error::InvalidArgument("Alias already exists".to_string()))
+                    } else {
+                        Err(Error::DatabaseError(format!(
+                            "Failed to create alias: {}",
+                            e
+                        )))
+                    }
                 }
-            })?;
-
-        Ok(())
+            }
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias create task failed: {}", e)))?
     }
 
     /// Gets an alias by name
     pub async fn get_alias(&self, name: &str) -> Result<Option<alias_entity::Model>, Error> {
-        alias_entity::Entity::find_by_id(name)
-            .one(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to get alias: {}", e)))
+        let pool = self.db.clone();
+        let name = name.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<alias_entity::Model>, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+
+            let row = conn
+                .query_row(
+                    "SELECT name, author, created_at, commands FROM aliases WHERE name = ?1",
+                    params![name],
+                    |row| {
+                        let created_at: String = row.get(2)?;
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            created_at,
+                            row.get::<_, String>(3)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(|e| Error::DatabaseError(format!("Failed to get alias: {}", e)))?;
+
+            if let Some((name, author, created_at_raw, commands)) = row {
+                Ok(Some(alias_entity::Model {
+                    name,
+                    author,
+                    created_at: Self::parse_created_at(&created_at_raw)?,
+                    commands,
+                }))
+            } else {
+                Ok(None)
+            }
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias get task failed: {}", e)))?
     }
 
     /// Lists all aliases
     pub async fn list_aliases(&self) -> Result<Vec<alias_entity::Model>, Error> {
-        alias_entity::Entity::find()
-            .all(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))
+        let pool = self.db.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<alias_entity::Model>, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let mut stmt = conn
+                .prepare("SELECT name, author, created_at, commands FROM aliases")
+                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
+
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })
+                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
+
+            let mut aliases = Vec::new();
+            for row in rows {
+                let (name, author, created_at_raw, commands) = row.map_err(|e| {
+                    Error::DatabaseError(format!("Failed to read alias row: {}", e))
+                })?;
+                aliases.push(alias_entity::Model {
+                    name,
+                    author,
+                    created_at: Self::parse_created_at(&created_at_raw)?,
+                    commands,
+                });
+            }
+
+            Ok(aliases)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias list task failed: {}", e)))?
     }
 
     /// Deletes an alias by name
     pub async fn delete_alias(&self, name: &str) -> Result<bool, Error> {
-        let result = alias_entity::Entity::delete_by_id(name)
-            .exec(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to delete alias: {}", e)))?;
+        let pool = self.db.clone();
+        let name = name.to_string();
 
-        Ok(result.rows_affected > 0)
+        tokio::task::spawn_blocking(move || -> Result<bool, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let rows = conn
+                .execute("DELETE FROM aliases WHERE name = ?1", params![name])
+                .map_err(|e| Error::DatabaseError(format!("Failed to delete alias: {}", e)))?;
+            Ok(rows > 0)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias delete task failed: {}", e)))?
     }
 
     /// Checks if an alias exists
     pub async fn alias_exists(&self, name: &str) -> Result<bool, Error> {
-        let count = alias_entity::Entity::find_by_id(name)
-            .count(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to check alias existence: {}", e)))?;
+        let pool = self.db.clone();
+        let name = name.to_string();
 
-        Ok(count > 0)
+        tokio::task::spawn_blocking(move || -> Result<bool, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM aliases WHERE name = ?1",
+                    params![name],
+                    |row| row.get(0),
+                )
+                .map_err(|e| {
+                    Error::DatabaseError(format!("Failed to check alias existence: {}", e))
+                })?;
+            Ok(count > 0)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias exists task failed: {}", e)))?
     }
 
     /// Lists aliases with pagination
@@ -81,27 +194,67 @@ impl AliasManager {
         page: u64,
         per_page: u64,
     ) -> Result<Vec<alias_entity::Model>, Error> {
-        let offset = page * per_page;
+        let pool = self.db.clone();
+        let offset = (page * per_page) as i64;
+        let limit = per_page as i64;
 
-        let aliases = alias_entity::Entity::find()
-            .order_by_asc(alias_entity::Column::Name)
-            .offset(offset)
-            .limit(per_page)
-            .all(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
+        tokio::task::spawn_blocking(move || -> Result<Vec<alias_entity::Model>, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT name, author, created_at, commands
+                     FROM aliases
+                     ORDER BY name ASC
+                     LIMIT ?1 OFFSET ?2",
+                )
+                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
 
-        Ok(aliases)
+            let rows = stmt
+                .query_map(params![limit, offset], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })
+                .map_err(|e| Error::DatabaseError(format!("Failed to list aliases: {}", e)))?;
+
+            let mut aliases = Vec::new();
+            for row in rows {
+                let (name, author, created_at_raw, commands) = row.map_err(|e| {
+                    Error::DatabaseError(format!("Failed to read alias row: {}", e))
+                })?;
+                aliases.push(alias_entity::Model {
+                    name,
+                    author,
+                    created_at: Self::parse_created_at(&created_at_raw)?,
+                    commands,
+                });
+            }
+            Ok(aliases)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias page task failed: {}", e)))?
     }
 
     /// Counts total number of aliases
     pub async fn count_aliases(&self) -> Result<u64, Error> {
-        let count = alias_entity::Entity::find()
-            .count(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to count aliases: {}", e)))?;
+        let pool = self.db.clone();
 
-        Ok(count)
+        tokio::task::spawn_blocking(move || -> Result<u64, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM aliases", [], |row| row.get(0))
+                .map_err(|e| Error::DatabaseError(format!("Failed to count aliases: {}", e)))?;
+            Ok(count as u64)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias count task failed: {}", e)))?
     }
 
     /// Searches aliases by name or commands
@@ -111,40 +264,76 @@ impl AliasManager {
         page: u64,
         per_page: u64,
     ) -> Result<Vec<alias_entity::Model>, Error> {
-        let offset = page * per_page;
+        let pool = self.db.clone();
         let search_pattern = format!("%{}%", search_term);
+        let offset = (page * per_page) as i64;
+        let limit = per_page as i64;
 
-        let aliases = alias_entity::Entity::find()
-            .filter(
-                alias_entity::Column::Name
-                    .like(&search_pattern)
-                    .or(alias_entity::Column::Commands.like(&search_pattern)),
-            )
-            .order_by_asc(alias_entity::Column::Name)
-            .offset(offset)
-            .limit(per_page)
-            .all(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to search aliases: {}", e)))?;
+        tokio::task::spawn_blocking(move || -> Result<Vec<alias_entity::Model>, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT name, author, created_at, commands
+                     FROM aliases
+                     WHERE name LIKE ?1 OR commands LIKE ?1
+                     ORDER BY name ASC
+                     LIMIT ?2 OFFSET ?3",
+                )
+                .map_err(|e| Error::DatabaseError(format!("Failed to search aliases: {}", e)))?;
 
-        Ok(aliases)
+            let rows = stmt
+                .query_map(params![search_pattern, limit, offset], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })
+                .map_err(|e| Error::DatabaseError(format!("Failed to search aliases: {}", e)))?;
+
+            let mut aliases = Vec::new();
+            for row in rows {
+                let (name, author, created_at_raw, commands) = row.map_err(|e| {
+                    Error::DatabaseError(format!("Failed to read alias row: {}", e))
+                })?;
+                aliases.push(alias_entity::Model {
+                    name,
+                    author,
+                    created_at: Self::parse_created_at(&created_at_raw)?,
+                    commands,
+                });
+            }
+            Ok(aliases)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias search task failed: {}", e)))?
     }
 
     /// Counts aliases matching search term
     pub async fn count_search_aliases(&self, search_term: &str) -> Result<u64, Error> {
+        let pool = self.db.clone();
         let search_pattern = format!("%{}%", search_term);
 
-        let count = alias_entity::Entity::find()
-            .filter(
-                alias_entity::Column::Name
-                    .like(&search_pattern)
-                    .or(alias_entity::Column::Commands.like(&search_pattern)),
-            )
-            .count(&self.db)
-            .await
-            .map_err(|e| Error::DatabaseError(format!("Failed to count search results: {}", e)))?;
-
-        Ok(count)
+        tokio::task::spawn_blocking(move || -> Result<u64, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM aliases WHERE name LIKE ?1 OR commands LIKE ?1",
+                    params![search_pattern],
+                    |row| row.get(0),
+                )
+                .map_err(|e| {
+                    Error::DatabaseError(format!("Failed to count search results: {}", e))
+                })?;
+            Ok(count as u64)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias search count task failed: {}", e)))?
     }
 
     /// Finds aliases that contain a specific sound code in their commands
@@ -152,34 +341,52 @@ impl AliasManager {
         &self,
         sound_code: &str,
     ) -> Result<Vec<alias_entity::Model>, Error> {
-        // Search for the sound code in various formats used in aliases
-        let search_patterns = vec![
-            sound_code.to_lowercase(), // Lowercase version
-            sound_code.to_uppercase(), // Uppercase version
-        ];
+        let pool = self.db.clone();
+        let search_pattern = format!("%{}%", sound_code);
 
-        let mut found_aliases = Vec::new();
-
-        for pattern in search_patterns {
-            let aliases = alias_entity::Entity::find()
-                .filter(alias_entity::Column::Commands.like(&format!("%{}%", pattern)))
-                .all(&self.db)
-                .await
+        tokio::task::spawn_blocking(move || -> Result<Vec<alias_entity::Model>, Error> {
+            let conn = pool
+                .get()
+                .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT name, author, created_at, commands
+                     FROM aliases
+                     WHERE lower(commands) LIKE lower(?1)
+                     ORDER BY name ASC",
+                )
                 .map_err(|e| {
                     Error::DatabaseError(format!("Failed to search aliases for sound code: {}", e))
                 })?;
 
-            for alias in aliases {
-                // Avoid duplicates
-                if !found_aliases
-                    .iter()
-                    .any(|a: &alias_entity::Model| a.name == alias.name)
-                {
-                    found_aliases.push(alias);
-                }
-            }
-        }
+            let rows = stmt
+                .query_map(params![search_pattern], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })
+                .map_err(|e| {
+                    Error::DatabaseError(format!("Failed to search aliases for sound code: {}", e))
+                })?;
 
-        Ok(found_aliases)
+            let mut aliases = Vec::new();
+            for row in rows {
+                let (name, author, created_at_raw, commands) = row.map_err(|e| {
+                    Error::DatabaseError(format!("Failed to read alias row: {}", e))
+                })?;
+                aliases.push(alias_entity::Model {
+                    name,
+                    author,
+                    created_at: Self::parse_created_at(&created_at_raw)?,
+                    commands,
+                });
+            }
+            Ok(aliases)
+        })
+        .await
+        .map_err(|e| Error::DatabaseError(format!("Alias by sound task failed: {}", e)))?
     }
 }

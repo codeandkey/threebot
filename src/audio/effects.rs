@@ -40,15 +40,28 @@ impl AudioEffect {
     pub fn description(&self, config: &AudioEffectSettings) -> String {
         match self {
             AudioEffect::Loud => format!("Increase volume (+{}dB)", config.loud_boost_db),
-            AudioEffect::Fast => format!("Increase speed/tempo ({}x)", config.fast_speed_multiplier),
-            AudioEffect::Slow => format!("Decrease speed/tempo ({}x)", config.slow_speed_multiplier),
+            AudioEffect::Fast => {
+                format!("Increase speed/tempo ({}x)", config.fast_speed_multiplier)
+            }
+            AudioEffect::Slow => {
+                format!("Decrease speed/tempo ({}x)", config.slow_speed_multiplier)
+            }
             AudioEffect::Reverb => "Add reverb effect".to_string(),
-            AudioEffect::Echo => format!("Add echo effect ({}ms delay, {} feedback)", config.echo_delay_ms, config.echo_feedback),
+            AudioEffect::Echo => format!(
+                "Add echo effect ({}ms delay, {} feedback)",
+                config.echo_delay_ms, config.echo_feedback
+            ),
             AudioEffect::Up => format!("Pitch up (+{} cents)", config.pitch_up_cents),
             AudioEffect::Down => format!("Pitch down ({} cents)", config.pitch_down_cents),
-            AudioEffect::Bass => format!("Bass boost (+{}dB at {}Hz)", config.bass_boost_gain_db, config.bass_boost_frequency_hz),
+            AudioEffect::Bass => format!(
+                "Bass boost (+{}dB at {}Hz)",
+                config.bass_boost_gain_db, config.bass_boost_frequency_hz
+            ),
             AudioEffect::Reverse => "Play audio backwards".to_string(),
-            AudioEffect::Muffle => format!("Apply low-pass filter (cutoff: {}Hz)", config.muffle_cutoff_frequency_hz),
+            AudioEffect::Muffle => format!(
+                "Apply low-pass filter (cutoff: {}Hz)",
+                config.muffle_cutoff_frequency_hz
+            ),
         }
     }
 
@@ -59,21 +72,26 @@ impl AudioEffect {
             AudioEffect::Fast => format!("atempo={}", config.fast_speed_multiplier),
             AudioEffect::Slow => format!("atempo={}", config.slow_speed_multiplier),
             AudioEffect::Reverb => panic!("Reverb effect should be handled by sox, not ffmpeg"),
-            AudioEffect::Echo => format!("aecho=0.8:0.9:{}:{}",config.echo_delay_ms, config.echo_feedback),
+            AudioEffect::Echo => format!(
+                "aecho=0.8:0.9:{}:{}",
+                config.echo_delay_ms, config.echo_feedback
+            ),
             AudioEffect::Up => {
                 // Convert cents to frequency ratio: ratio = 2^(cents/1200)
                 let ratio = 2.0_f64.powf(config.pitch_up_cents as f64 / 1200.0);
                 format!("asetrate=48000*{:.6},aresample=48000", ratio)
-            },
+            }
             AudioEffect::Down => {
                 // Convert cents to frequency ratio: ratio = 2^(cents/1200)
                 let ratio = 2.0_f64.powf(config.pitch_down_cents as f64 / 1200.0);
                 format!("asetrate=48000*{:.6},aresample=48000", ratio)
-            },
-            AudioEffect::Bass => format!("equalizer=f={}:width_type=h:width={}:g={}", 
-                config.bass_boost_frequency_hz, 
-                config.bass_boost_frequency_hz, 
-                config.bass_boost_gain_db),
+            }
+            AudioEffect::Bass => format!(
+                "equalizer=f={}:width_type=h:width={}:g={}",
+                config.bass_boost_frequency_hz,
+                config.bass_boost_frequency_hz,
+                config.bass_boost_gain_db
+            ),
             AudioEffect::Reverse => "areverse".to_string(),
             AudioEffect::Muffle => format!("lowpass=f={}", config.muffle_cutoff_frequency_hz),
         }
@@ -110,9 +128,9 @@ struct PipelineBuilder {
 
 impl PipelineBuilder {
     fn new(config: AudioEffectSettings) -> Self {
-        Self { 
-            stages: Vec::new(), 
-            config 
+        Self {
+            stages: Vec::new(),
+            config,
         }
     }
 
@@ -218,7 +236,12 @@ impl PipelineBuilder {
             .arg("2") // Channels: 2 (stereo)
             .arg("-") // Output to stdout
             .args([
-                "gain", "-3", "pad", "0", "4", "reverb", 
+                "gain",
+                "-3",
+                "pad",
+                "0",
+                "4",
+                "reverb",
                 &format!("{}", (self.config.reverb_room_size * 100.0) as u32),
                 &format!("{}", (self.config.reverb_room_size * 100.0) as u32),
                 &format!("{}", (self.config.reverb_damping * 100.0) as u32),
@@ -259,7 +282,7 @@ impl PipelineBuilder {
                         log::error!("Failed to spawn ffmpeg process for stage {}: {}", i, e);
                         Error::IOError(e)
                     })?;
-                    
+
                     // Spawn task to capture stderr (don't log immediately)
                     let stderr_handle = if let Some(stderr) = child.stderr.take() {
                         let stage_num = i;
@@ -268,8 +291,14 @@ impl PipelineBuilder {
                             let mut line = String::new();
                             let mut lines = Vec::new();
                             while let Ok(n) = reader.read_line(&mut line).await {
-                                if n == 0 { break; }
-                                lines.push(format!("FFmpeg stage {} stderr: {}", stage_num, line.trim()));
+                                if n == 0 {
+                                    break;
+                                }
+                                lines.push(format!(
+                                    "FFmpeg stage {} stderr: {}",
+                                    stage_num,
+                                    line.trim()
+                                ));
                                 line.clear();
                             }
                             lines
@@ -277,11 +306,11 @@ impl PipelineBuilder {
                     } else {
                         None
                     };
-                    
+
                     if let Some(handle) = stderr_handle {
                         stderr_handles.push(handle);
                     }
-                    
+
                     child
                 }
                 PipelineStage::Sox { mut command } => {
@@ -290,7 +319,7 @@ impl PipelineBuilder {
                         log::error!("Failed to spawn sox process for stage {}: {}", i, e);
                         Error::IOError(e)
                     })?;
-                    
+
                     // Spawn task to capture stderr (don't log immediately)
                     let stderr_handle = if let Some(stderr) = child.stderr.take() {
                         let stage_num = i;
@@ -299,8 +328,14 @@ impl PipelineBuilder {
                             let mut line = String::new();
                             let mut lines = Vec::new();
                             while let Ok(n) = reader.read_line(&mut line).await {
-                                if n == 0 { break; }
-                                lines.push(format!("Sox stage {} stderr: {}", stage_num, line.trim()));
+                                if n == 0 {
+                                    break;
+                                }
+                                lines.push(format!(
+                                    "Sox stage {} stderr: {}",
+                                    stage_num,
+                                    line.trim()
+                                ));
                                 line.clear();
                             }
                             lines
@@ -308,11 +343,11 @@ impl PipelineBuilder {
                     } else {
                         None
                     };
-                    
+
                     if let Some(handle) = stderr_handle {
                         stderr_handles.push(handle);
                     }
-                    
+
                     child
                 }
             };
@@ -371,7 +406,7 @@ impl PipelineBuilder {
                                 i,
                                 status.code().unwrap_or(-1)
                             );
-                            
+
                             // Dump stderr for this failed stage
                             if i < all_stderr.len() {
                                 for stderr_line in &all_stderr[i] {
@@ -382,7 +417,7 @@ impl PipelineBuilder {
                     }
                     Err(e) => {
                         log::error!("Error waiting for stage {}: {}", i, e);
-                        
+
                         // Also dump stderr for stages that errored
                         if i < all_stderr.len() {
                             for stderr_line in &all_stderr[i] {
@@ -537,12 +572,15 @@ mod tests {
             "bass".to_string(),
         ];
         let effects = parse_effects(&input).unwrap();
-        assert_eq!(effects, vec![
-            AudioEffect::Loud,
-            AudioEffect::Fast,
-            AudioEffect::Reverb,
-            AudioEffect::Bass
-        ]);
+        assert_eq!(
+            effects,
+            vec![
+                AudioEffect::Loud,
+                AudioEffect::Fast,
+                AudioEffect::Reverb,
+                AudioEffect::Bass
+            ]
+        );
 
         let invalid = vec!["loud".to_string(), "invalid".to_string()];
         assert!(parse_effects(&invalid).is_err());
@@ -635,7 +673,7 @@ mod tests {
             echo_feedback: 0.3,
             muffle_cutoff_frequency_hz: 1000.0,
         };
-        
+
         assert_eq!(AudioEffect::Loud.to_ffmpeg_filter(&config), "volume=6dB");
         assert_eq!(AudioEffect::Fast.to_ffmpeg_filter(&config), "atempo=1.5");
         assert_eq!(AudioEffect::Slow.to_ffmpeg_filter(&config), "atempo=0.75");
@@ -655,10 +693,7 @@ mod tests {
             AudioEffect::Bass.to_ffmpeg_filter(&config),
             "equalizer=f=50:width_type=h:width=50:g=25"
         );
-        assert_eq!(
-            AudioEffect::Reverse.to_ffmpeg_filter(&config),
-            "areverse"
-        );
+        assert_eq!(AudioEffect::Reverse.to_ffmpeg_filter(&config), "areverse");
         assert_eq!(
             AudioEffect::Muffle.to_ffmpeg_filter(&config),
             "lowpass=f=1000"

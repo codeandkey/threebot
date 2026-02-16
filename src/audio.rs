@@ -8,7 +8,7 @@ use std::{
 use log::trace;
 
 use tokio::{
-    io::{AsyncReadExt, AsyncBufReadExt},
+    io::{AsyncBufReadExt, AsyncReadExt},
     process::Command,
     sync::{Mutex, mpsc},
     time::{self, Duration},
@@ -16,7 +16,11 @@ use tokio::{
 
 use opus::Encoder;
 
-use crate::{config::{BehaviorSettings, AudioEffectSettings}, session::OutgoingMessage, util};
+use crate::{
+    config::{AudioEffectSettings, BehaviorSettings},
+    session::OutgoingMessage,
+    util,
+};
 use effects::{AudioEffect, AudioEffectsProcessor};
 
 pub mod effects;
@@ -143,7 +147,7 @@ impl AudioMixer {
 
             {
                 let mut streams = self.streams.lock().await;
-                
+
                 for (stream_index, stream) in streams.iter().enumerate() {
                     // Try to acquire locks without blocking - use try_lock for better performance
                     if let Ok(mut pcm) = stream.buffer.try_lock() {
@@ -154,9 +158,10 @@ impl AudioMixer {
                                     self.temp_buffer.clear();
                                     self.temp_buffer.extend_from_slice(&pcm);
                                     self.temp_buffer.resize(FRAME_SAMPLES, 0);
-                                    
+
                                     for i in 0..FRAME_SAMPLES {
-                                        self.mixed_buffer[i] = self.mixed_buffer[i].saturating_add(self.temp_buffer[i]);
+                                        self.mixed_buffer[i] = self.mixed_buffer[i]
+                                            .saturating_add(self.temp_buffer[i]);
                                     }
                                     pcm.clear();
                                     active += 1;
@@ -177,7 +182,7 @@ impl AudioMixer {
                         }
                     }
                 }
-                
+
                 // Remove finished streams (iterate in reverse to maintain indices)
                 for &index in streams_to_remove.iter().rev() {
                     streams.remove(index);
@@ -230,7 +235,10 @@ impl AudioMixer {
             let seq = util::encode_varint_long(self.seq as u64);
             let mut opus_buf = vec![0; 1000];
 
-            match self.encoder.encode(&self.mixed_buffer[..], &mut opus_buf[..]) {
+            match self
+                .encoder
+                .encode(&self.mixed_buffer[..], &mut opus_buf[..])
+            {
                 Ok(len) => {
                     opus_buf.truncate(len);
                 }
@@ -321,7 +329,7 @@ impl AudioMixerControl {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped()) // Capture stderr for potential error reporting
                 .spawn()?;
-            
+
             // Capture stderr in background task (don't log immediately)
             let stderr_handle = if let Some(stderr) = child.stderr.take() {
                 Some(tokio::spawn(async move {
@@ -329,7 +337,9 @@ impl AudioMixerControl {
                     let mut line = String::new();
                     let mut lines = Vec::new();
                     while let Ok(n) = reader.read_line(&mut line).await {
-                        if n == 0 { break; }
+                        if n == 0 {
+                            break;
+                        }
                         lines.push(format!("FFmpeg direct conversion stderr: {}", line.trim()));
                         line.clear();
                     }
@@ -338,10 +348,10 @@ impl AudioMixerControl {
             } else {
                 None
             };
-            
+
             // Store stderr handle for later status checking
             let stderr_handle_for_status = stderr_handle;
-            
+
             // Spawn task to monitor process and log stderr on apparent failure
             tokio::spawn(async move {
                 // Wait for stderr collection to complete
@@ -352,9 +362,11 @@ impl AudioMixerControl {
                         Ok(stderr_lines) => {
                             // Check if there are any error indicators in stderr
                             let has_errors = stderr_lines.iter().any(|line| {
-                                line.contains("Error") || line.contains("failed") || line.contains("Invalid")
+                                line.contains("Error")
+                                    || line.contains("failed")
+                                    || line.contains("Invalid")
                             });
-                            
+
                             // Log stderr if there were apparent errors
                             if has_errors {
                                 log::error!("FFmpeg direct conversion appears to have failed:");
@@ -367,7 +379,7 @@ impl AudioMixerControl {
                     }
                 }
             });
-            
+
             child
         };
 

@@ -4,6 +4,26 @@ use tokio::sync::Mutex;
 
 use crate::error::Error;
 
+fn detect_error_reply(input: &str) -> bool {
+    input.trim_start().to_lowercase().starts_with("error:")
+}
+
+fn strip_error_prefix(input: &str) -> String {
+    let trimmed = input.trim_start();
+    for prefix in ["error:", "Error:"] {
+        if let Some(value) = trimmed.strip_prefix(prefix) {
+            return value.trim_start().to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+fn format_error_html(input: &str) -> String {
+    let cleaned = strip_error_prefix(input);
+    let body = crate::session::markdown_to_html(&cleaned);
+    format!("<span style=\"color: #ff4d4f;\">error: {}</span>", body)
+}
+
 /// A context-aware SessionTools implementation that handles reply routing
 struct ContextAwareSessionTools<'a> {
     tools: &'a dyn SessionTools,
@@ -40,7 +60,9 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
         effects: &[crate::audio::effects::AudioEffect],
         sound_code: &str,
     ) -> Result<(), Error> {
-        self.tools.play_sound_with_effects_and_code(file_path, effects, sound_code).await
+        self.tools
+            .play_sound_with_effects_and_code(file_path, effects, sound_code)
+            .await
     }
 
     async fn stop_all_streams(&self) -> Result<(), Error> {
@@ -60,26 +82,34 @@ impl<'a> SessionTools for ContextAwareSessionTools<'a> {
     }
 
     async fn reply(&self, message: &str) -> Result<(), Error> {
+        let rendered = if detect_error_reply(message) {
+            format_error_html(message)
+        } else {
+            crate::session::markdown_to_html(message)
+        };
+
         // Always send as private message to the triggering user
         if let Some(user_id) = self.context.triggering_user_id {
-            self.tools
-                .send_private_message(user_id, &crate::session::markdown_to_html(message))
-                .await
+            self.tools.send_private_message(user_id, &rendered).await
         } else {
             // Fallback to broadcast if no user ID
-            self.tools
-                .broadcast(&crate::session::markdown_to_html(message))
-                .await
+            self.tools.broadcast(&rendered).await
         }
     }
 
     async fn reply_html(&self, html: &str) -> Result<(), Error> {
+        let rendered = if detect_error_reply(html) {
+            format_error_html(html)
+        } else {
+            html.to_string()
+        };
+
         // Always send as private message to the triggering user
         if let Some(user_id) = self.context.triggering_user_id {
-            self.tools.send_private_message(user_id, html).await
+            self.tools.send_private_message(user_id, &rendered).await
         } else {
             // Fallback to broadcast if no user ID
-            self.tools.broadcast(html).await
+            self.tools.broadcast(&rendered).await
         }
     }
 
@@ -270,7 +300,7 @@ pub trait SessionTools: Send + Sync {
     ) -> String {
         let per_page = per_page.unwrap_or(30); // Default to 30 rows per page
         let page = page.unwrap_or(1); // Default to page 1
-        
+
         // Calculate pagination
         let start_idx = (page - 1) * per_page;
         let end_idx = std::cmp::min(start_idx + per_page, rows.len());
@@ -279,10 +309,11 @@ pub trait SessionTools: Send + Sync {
         } else {
             &[]
         };
-        
+
         // Build table HTML
-        let mut table = String::from("<table style=\"border-collapse: collapse; width: 100%; border: none;\">");
-        
+        let mut table =
+            String::from("<table style=\"border-collapse: collapse; width: 100%; border: none;\">");
+
         // Add header row
         table.push_str("<tr>");
         for header in headers {
@@ -292,7 +323,7 @@ pub trait SessionTools: Send + Sync {
             ));
         }
         table.push_str("</tr>");
-        
+
         // Add data rows
         for row in paginated_rows {
             table.push_str("<tr>");
@@ -304,16 +335,16 @@ pub trait SessionTools: Send + Sync {
             }
             table.push_str("</tr>");
         }
-        
+
         table.push_str("</table>");
-        
+
         // Add pagination info
         let actual_total = total_count.unwrap_or(rows.len());
         if actual_total > per_page {
             let total_pages = (actual_total + per_page - 1) / per_page; // Ceiling division
             let showing_start = start_idx + 1;
             let showing_end = std::cmp::min(start_idx + paginated_rows.len(), actual_total);
-            
+
             table.push_str(&format!(
                 "<div style=\"margin-top: 10px; font-style: italic; color: #666; text-align: center;\">Showing {} - {} of {} total (Page {} of {})</div>",
                 showing_start, showing_end, actual_total, page, total_pages
@@ -336,7 +367,7 @@ pub trait SessionTools: Send + Sync {
                 }
             }
         }
-        
+
         table
     }
 }
@@ -587,7 +618,7 @@ impl Executor {
             let recent_sounds = tools.get_sound_history(1);
             if recent_sounds.is_empty() {
                 return Err(Error::InvalidArgument(
-                    "Cannot use $recent: no sounds have been played yet".to_string()
+                    "Cannot use $recent: no sounds have been played yet".to_string(),
                 ));
             }
             let recent_code = recent_sounds[0].0.clone();

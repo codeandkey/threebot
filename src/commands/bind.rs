@@ -17,7 +17,7 @@ impl Command for BindCommand {
             Some(id) => id,
             None => {
                 tools
-                    .reply("❌ Unable to identify user for bind command")
+                    .reply("error: Unable to identify user for bind command")
                     .await?;
                 return Ok(());
             }
@@ -29,14 +29,14 @@ impl Command for BindCommand {
                 Some(name) if !name.is_empty() => name.clone(),
                 _ => {
                     tools
-                        .reply("❌ Unable to get valid username for bind command")
+                        .reply("error: Unable to get valid username for bind command")
                         .await?;
                     return Ok(());
                 }
             },
             None => {
                 tools
-                    .reply("❌ Unable to find user information for bind command")
+                    .reply("error: Unable to find user information for bind command")
                     .await?;
                 return Ok(());
             }
@@ -49,30 +49,30 @@ impl Command for BindCommand {
                     Ok(Some(bind_command)) => {
                         // Execute the bind command by parsing and running it
                         tools
-                            .reply(&format!("🔗 Executing bind: {}", bind_command))
+                            .reply(&format!(" Executing bind: {}", bind_command))
                             .await?;
 
                         // Execute the command - it should already have the ! prefix from storage
                         if let Err(e) = tools.execute_command(&bind_command, &context).await {
                             tools
-                                .reply(&format!("❌ Error executing bind command: {}", e))
+                                .reply(&format!("error: Error executing bind command: {}", e))
                                 .await?;
                         }
                     }
                     Ok(None) => {
-                        tools.reply("❌ You don't have a bind command set. Use `!bind <command>` to set one.\n\
+                        tools.reply("error: You don't have a bind command set. Use `!bind <command>` to set one.\n\
                                     **Example:**\n\
-                                    • `!bind sound play ABCD` - Bind a sound").await?;
+                                     `!bind sound play ABCD` - Bind a sound").await?;
                     }
                     Err(e) => {
                         tools
-                            .reply(&format!("❌ Error retrieving bind command: {}", e))
+                            .reply(&format!("error: Error retrieving bind command: {}", e))
                             .await?;
                     }
                 }
             } else {
                 tools
-                    .reply("❌ User settings manager not available")
+                    .reply("error: User settings manager not available")
                     .await?;
             }
         } else {
@@ -92,18 +92,18 @@ impl Command for BindCommand {
                     Ok(()) => {
                         // Show the user what was actually stored (with the !)
                         tools
-                            .reply(&format!("✅ Bind command set to: `{}`", bind_command))
+                            .reply(&format!(" Bind command set to: `{}`", bind_command))
                             .await?;
                     }
                     Err(e) => {
                         tools
-                            .reply(&format!("❌ Error setting bind command: {}", e))
+                            .reply(&format!("error: Error setting bind command: {}", e))
                             .await?;
                     }
                 }
             } else {
                 tools
-                    .reply("❌ User settings manager not available")
+                    .reply("error: User settings manager not available")
                     .await?;
             }
         }

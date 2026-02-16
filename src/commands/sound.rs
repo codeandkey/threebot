@@ -9,7 +9,16 @@ impl SoundCommand {
         let effect_name = arg.strip_prefix('+').unwrap_or(arg);
         matches!(
             effect_name,
-            "loud" | "fast" | "slow" | "reverb" | "echo" | "up" | "down" | "bass" | "reverse" | "muffle"
+            "loud"
+                | "fast"
+                | "slow"
+                | "reverb"
+                | "echo"
+                | "up"
+                | "down"
+                | "bass"
+                | "reverse"
+                | "muffle"
         )
     }
 
@@ -328,48 +337,48 @@ impl Command for SoundCommand {
     ) -> Result<(), crate::error::Error> {
         if args.is_empty() {
             tools.reply("
-                • `!sound play` - Play a random sound (with possible random effects)\n\
-                • `!sound play <code>` - Play a specific sound by code (with possible random effects)\n\
-                • `!sound play <code> [effects...]` - Play a sound with audio effects\n\
-                • `!sound play [+effects...]` - Play a random sound with audio effects\n\
-                • `!sound list [page]` - List all available sounds (30 per page, ordered by newest first)\n\
-                • `!sound history` - Show the last 10 sounds that were played (most recent first)\n\
-                • `!sound info <code>` - Show detailed information about a sound\n\
-                • `!sound remove <code>` - Remove a sound from database and delete file from disk\n\
-                • `!sound pull <URL> <start> <length>` - Extract audio from a video/audio URL\n\
-                • `!sound scan` - Scan for orphaned sound files\n\
-                • `!sound stopall` - Stop all currently playing audio streams\n\n\
+                 `!sound play` - Play a random sound (with possible random effects)\n\
+                 `!sound play <code>` - Play a specific sound by code (with possible random effects)\n\
+                 `!sound play <code> [effects...]` - Play a sound with audio effects\n\
+                 `!sound play [+effects...]` - Play a random sound with audio effects\n\
+                 `!sound list [page]` - List all available sounds (30 per page, ordered by newest first)\n\
+                 `!sound history` - Show the last 10 sounds that were played (most recent first)\n\
+                 `!sound info <code>` - Show detailed information about a sound\n\
+                 `!sound remove <code>` - Remove a sound from database and delete file from disk\n\
+                 `!sound pull <URL> <start> <length>` - Extract audio from a video/audio URL\n\
+                 `!sound scan` - Scan for orphaned sound files\n\
+                 `!sound stopall` - Stop all currently playing audio streams\n\n\
                 **Audio Effects:**\n\
-                • `loud` - Increase volume (+6dB)\n\
-                • `fast` - Increase speed/tempo (1.5x)\n\
-                • `slow` - Decrease speed/tempo (0.75x)\n\
-                • `reverb` - Add reverb effect\n\
-                • `echo` - Add echo effect\n\
-                • `up` - Pitch up (+200 cents)\n\
-                • `down` - Pitch down (-200 cents)\n\
-                • `bass` - Bass boost (+25dB at 50Hz)\n\
-                • `reverse` - Play audio backwards\n\
-                • `muffle` - Apply low-pass filter (1000Hz cutoff)\n\n\
+                 `loud` - Increase volume (+6dB)\n\
+                 `fast` - Increase speed/tempo (1.5x)\n\
+                 `slow` - Decrease speed/tempo (0.75x)\n\
+                 `reverb` - Add reverb effect\n\
+                 `echo` - Add echo effect\n\
+                 `up` - Pitch up (+200 cents)\n\
+                 `down` - Pitch down (-200 cents)\n\
+                 `bass` - Bass boost (+25dB at 50Hz)\n\
+                 `reverse` - Play audio backwards\n\
+                 `muffle` - Apply low-pass filter (1000Hz cutoff)\n\n\
                 **Random Effects:**\n\
-                • When no specific sound is provided, random effects may be applied based on server configuration\n\
-                • Configure via `random_modifiers_enabled`, `random_modifier_chance`, and `random_modifier_rounds` in config.yml\n\n\
+                 When no specific sound is provided, random effects may be applied based on server configuration\n\
+                 Configure via `random_modifiers_enabled`, `random_modifier_chance`, and `random_modifier_rounds` in config.yml\n\n\
                 **Pull Command Details:**\n\
-                • `<URL>` - YouTube, Twitter, or other supported video/audio URL\n\
-                • `<start>` - Start time (e.g., '30', '1:30', '1:23:45')\n\
-                • `<length>` - Duration in seconds (e.g., '5', '10.5')\n\
-                • For age-restricted or private content, configure `ytdlp_cookies_file` in config.yml\n\n\
+                 `<URL>` - YouTube, Twitter, or other supported video/audio URL\n\
+                 `<start>` - Start time (e.g., '30', '1:30', '1:23:45')\n\
+                 `<length>` - Duration in seconds (e.g., '5', '10.5')\n\
+                 For age-restricted or private content, configure `ytdlp_cookies_file` in config.yml\n\n\
                 **Examples:**\n\
-                • `!sound play` - Play random sound (may have random effects)\n\
-                • `!sound play +reverb` - Play random sound with reverb\n\
-                • `!sound play abc123` - Play sound with code 'abc123' (may have random effects)\n\
-                • `!sound play abc123 loud fast` - Play sound with volume boost and faster tempo\n\
-                • `!sound play abc123 +reverb +echo +bass` - Play sound with reverb, echo, and bass boost effects\n\
-                • `!sound list` - Show first page of sounds\n\
-                • `!sound list 2` - Show second page of sounds\n\
-                • `!sound history` - Show recently played sounds\n\
-                • `!sound info abc123` - Show information about sound 'abc123'\n\
-                • `!sound remove abc123` - Remove sound 'abc123' completely (database + file)\n\
-                • `!sound pull https://youtube.com/watch?v=... 1:30 5` - Extract 5 seconds starting at 1:30").await?;
+                 `!sound play` - Play random sound (may have random effects)\n\
+                 `!sound play +reverb` - Play random sound with reverb\n\
+                 `!sound play abc123` - Play sound with code 'abc123' (may have random effects)\n\
+                 `!sound play abc123 loud fast` - Play sound with volume boost and faster tempo\n\
+                 `!sound play abc123 +reverb +echo +bass` - Play sound with reverb, echo, and bass boost effects\n\
+                 `!sound list` - Show first page of sounds\n\
+                 `!sound list 2` - Show second page of sounds\n\
+                 `!sound history` - Show recently played sounds\n\
+                 `!sound info abc123` - Show information about sound 'abc123'\n\
+                 `!sound remove abc123` - Remove sound 'abc123' completely (database + file)\n\
+                 `!sound pull https://youtube.com/watch?v=... 1:30 5` - Extract 5 seconds starting at 1:30").await?;
             return Ok(());
         }
 
@@ -380,7 +389,7 @@ impl Command for SoundCommand {
                     match args[1].parse::<usize>() {
                         Ok(p) if p > 0 => p,
                         _ => {
-                            tools.reply("❌ Invalid page number. Use `!sound list [page]` where page is a positive number.").await?;
+                            tools.reply(" Invalid page number. Use `!sound list [page]` where page is a positive number.").await?;
                             return Ok(());
                         }
                     }
@@ -392,18 +401,23 @@ impl Command for SoundCommand {
                     match manager.list_sounds().await {
                         Ok(sounds) => {
                             if sounds.is_empty() {
-                                tools.reply("📋 No sounds available").await?;
+                                tools.reply(" No sounds available").await?;
                             } else {
                                 let per_page = 30;
                                 let total_pages = (sounds.len() + per_page - 1) / per_page;
-                                
+
                                 if page > total_pages {
-                                    tools.reply(&format!("❌ Page {} does not exist. Total pages: {}", page, total_pages)).await?;
+                                    tools
+                                        .reply(&format!(
+                                            " Page {} does not exist. Total pages: {}",
+                                            page, total_pages
+                                        ))
+                                        .await?;
                                     return Ok(());
                                 }
 
                                 let mut response =
-                                    format!("🔊 Available Sounds ({} total)\n\n", sounds.len());
+                                    format!(" Available Sounds ({} total)\n\n", sounds.len());
 
                                 // Get alias manager for looking up aliases
                                 let alias_manager = tools.get_alias_manager();
@@ -462,12 +476,12 @@ impl Command for SoundCommand {
                                 // Use pagination
                                 response.push_str("<div style=\"text-align: center;\">");
                                 response.push_str(&tools.create_html_table_paginated(
-                                    headers, 
-                                    &rows, 
+                                    headers,
+                                    &rows,
                                     Some(page),
                                     Some(per_page),
                                     Some(sounds.len()),
-                                    "!sound list"
+                                    "!sound list",
                                 ));
                                 response.push_str("</div>");
 
@@ -476,28 +490,30 @@ impl Command for SoundCommand {
                         }
                         Err(e) => {
                             tools
-                                .reply(&format!("❌ Failed to list sounds: {}", e))
+                                .reply(&format!(" Failed to list sounds: {}", e))
                                 .await?;
                         }
                     }
                 } else {
-                    tools.reply("❌ Sounds manager not available").await?;
+                    tools.reply(" Sounds manager not available").await?;
                 }
             }
             "history" => {
                 if let Some(manager) = tools.get_sounds_manager() {
                     let history = tools.get_sound_history(10);
-                    
+
                     if history.is_empty() {
-                        tools.reply("📋 No sounds have been played recently").await?;
+                        tools.reply(" No sounds have been played recently").await?;
                     } else {
-                        let mut response = format!("🕰️ Recently Played Sounds ({} total)\n\n", history.len());
+                        let mut response =
+                            format!(" Recently Played Sounds ({} total)\n\n", history.len());
 
                         // Get alias manager for looking up aliases
                         let alias_manager = tools.get_alias_manager();
 
                         // Prepare table data
-                        let headers = &["Played", "Code", "Source", "Author", "Duration", "Aliases"];
+                        let headers =
+                            &["Played", "Code", "Source", "Author", "Duration", "Aliases"];
                         let mut rows = Vec::new();
 
                         for (sound_code, played_at) in history {
@@ -563,7 +579,7 @@ impl Command for SoundCommand {
                         tools.reply_html(&response).await?;
                     }
                 } else {
-                    tools.reply("❌ Sounds manager not available").await?;
+                    tools.reply(" Sounds manager not available").await?;
                 }
             }
             "play" => {
@@ -588,7 +604,7 @@ impl Command for SoundCommand {
                 let mut effects = match crate::audio::effects::parse_effects(&effect_strings) {
                     Ok(effects) => effects,
                     Err(e) => {
-                        tools.reply(&format!("❌ {}", e)).await?;
+                        tools.reply(&format!(" {}", e)).await?;
                         return Ok(());
                     }
                 };
@@ -605,14 +621,12 @@ impl Command for SoundCommand {
                         match manager.get_sound(&code).await {
                             Ok(Some(sound_file)) => (sound_file, code),
                             Ok(None) => {
-                                tools
-                                    .reply(&format!("❌ Sound '{}' not found", code))
-                                    .await?;
+                                tools.reply(&format!(" Sound '{}' not found", code)).await?;
                                 return Ok(());
                             }
                             Err(e) => {
                                 tools
-                                    .reply(&format!("❌ Error retrieving sound '{}': {}", code, e))
+                                    .reply(&format!(" Error retrieving sound '{}': {}", code, e))
                                     .await?;
                                 return Ok(());
                             }
@@ -629,12 +643,12 @@ impl Command for SoundCommand {
                                 (sound_file, code)
                             }
                             Ok(None) => {
-                                tools.reply("❌ No sounds available").await?;
+                                tools.reply(" No sounds available").await?;
                                 return Ok(());
                             }
                             Err(e) => {
                                 tools
-                                    .reply(&format!("❌ Error getting random sound: {}", e))
+                                    .reply(&format!(" Error getting random sound: {}", e))
                                     .await?;
                                 return Ok(());
                             }
@@ -644,19 +658,24 @@ impl Command for SoundCommand {
                     // Check if file exists
                     if !sound_file.exists() {
                         tools
-                            .reply(&format!(
-                                "❌ Sound file '{}' not found on disk",
-                                display_code
-                            ))
+                            .reply(&format!(" Sound file '{}' not found on disk", display_code))
                             .await?;
                         return Ok(());
                     }
 
                     if let Some(file_path_str) = sound_file.path_str() {
                         let result = if effects.is_empty() {
-                            tools.play_sound_with_code(file_path_str, &display_code).await
+                            tools
+                                .play_sound_with_code(file_path_str, &display_code)
+                                .await
                         } else {
-                            tools.play_sound_with_effects_and_code(file_path_str, &effects, &display_code).await
+                            tools
+                                .play_sound_with_effects_and_code(
+                                    file_path_str,
+                                    &effects,
+                                    &display_code,
+                                )
+                                .await
                         };
 
                         match result {
@@ -666,19 +685,16 @@ impl Command for SoundCommand {
                                 let message = if !is_random_sound {
                                     // Specific sound
                                     if effects.is_empty() {
-                                        format!("🔊 Playing sound '{}'", display_code)
+                                        format!(" Playing sound '{}'", display_code)
                                     } else {
                                         let effect_names: Vec<String> = effects
                                             .iter()
                                             .map(|e| format!("{:?}", e).to_lowercase())
                                             .collect();
-                                        let effect_prefix = if has_random_effects {
-                                            "🎲 random "
-                                        } else {
-                                            ""
-                                        };
+                                        let effect_prefix =
+                                            if has_random_effects { " random " } else { "" };
                                         format!(
-                                            "🔊 Playing sound '{}' with {}effects: {}",
+                                            " Playing sound '{}' with {}effects: {}",
                                             display_code,
                                             effect_prefix,
                                             effect_names.join(", ")
@@ -687,19 +703,16 @@ impl Command for SoundCommand {
                                 } else {
                                     // Random sound
                                     if effects.is_empty() {
-                                        format!("🎲 Playing random sound '{}'", display_code)
+                                        format!(" Playing random sound '{}'", display_code)
                                     } else {
                                         let effect_names: Vec<String> = effects
                                             .iter()
                                             .map(|e| format!("{:?}", e).to_lowercase())
                                             .collect();
-                                        let effect_prefix = if has_random_effects {
-                                            "🎲 random "
-                                        } else {
-                                            ""
-                                        };
+                                        let effect_prefix =
+                                            if has_random_effects { " random " } else { "" };
                                         format!(
-                                            "🎲 Playing random sound '{}' with {}effects: {}",
+                                            " Playing random sound '{}' with {}effects: {}",
                                             display_code,
                                             effect_prefix,
                                             effect_names.join(", ")
@@ -711,7 +724,7 @@ impl Command for SoundCommand {
                             Err(e) => {
                                 tools
                                     .reply(&format!(
-                                        "❌ Failed to play sound '{}': {}",
+                                        " Failed to play sound '{}': {}",
                                         display_code, e
                                     ))
                                     .await?;
@@ -719,14 +732,11 @@ impl Command for SoundCommand {
                         }
                     } else {
                         tools
-                            .reply(&format!(
-                                "❌ Invalid file path for sound '{}'",
-                                display_code
-                            ))
+                            .reply(&format!(" Invalid file path for sound '{}'", display_code))
                             .await?;
                     }
                 } else {
-                    tools.reply("❌ Sounds manager not available").await?;
+                    tools.reply(" Sounds manager not available").await?;
                 }
             }
             "info" => {
@@ -737,8 +747,7 @@ impl Command for SoundCommand {
                     if let Some(manager) = tools.get_sounds_manager() {
                         match manager.get_sound(code).await {
                             Ok(Some(sound_file)) => {
-                                let mut response =
-                                    format!("🔊 Sound Information: {}\n\n", code);
+                                let mut response = format!(" Sound Information: {}\n\n", code);
 
                                 if let Some(metadata) = &sound_file.metadata {
                                     response
@@ -769,7 +778,7 @@ impl Command for SoundCommand {
 
                                 // Check if file exists
                                 if sound_file.exists() {
-                                    response.push_str("**Status:** ✅ File exists on disk\n");
+                                    response.push_str("**Status:**  File exists on disk\n");
 
                                     // Get file size if possible
                                     if let Ok(metadata) = std::fs::metadata(&sound_file.file_path) {
@@ -787,24 +796,22 @@ impl Command for SoundCommand {
                                         }
                                     }
                                 } else {
-                                    response.push_str("**Status:** ❌ File missing from disk\n");
+                                    response.push_str("**Status:**  File missing from disk\n");
                                 }
 
                                 tools.reply(&response).await?;
                             }
                             Ok(None) => {
-                                tools
-                                    .reply(&format!("❌ Sound '{}' not found", code))
-                                    .await?;
+                                tools.reply(&format!(" Sound '{}' not found", code)).await?;
                             }
                             Err(e) => {
                                 tools
-                                    .reply(&format!("❌ Error retrieving sound info: {}", e))
+                                    .reply(&format!(" Error retrieving sound info: {}", e))
                                     .await?;
                             }
                         }
                     } else {
-                        tools.reply("❌ Sounds manager not available").await?;
+                        tools.reply(" Sounds manager not available").await?;
                     }
                 }
             }
@@ -840,15 +847,13 @@ impl Command for SoundCommand {
                             Ok(code) => {
                                 tools
                                     .reply(&format!(
-                                        "✅ Successfully pulled audio and saved as sound '{}' 🔊",
+                                        " Successfully pulled audio and saved as sound '{}' ",
                                         code
                                     ))
                                     .await?;
                             }
                             Err(e) => {
-                                tools
-                                    .reply(&format!("❌ Error pulling audio: {}", e))
-                                    .await?;
+                                tools.reply(&format!(" Error pulling audio: {}", e)).await?;
                             }
                         }
                     } else {
@@ -865,26 +870,26 @@ impl Command for SoundCommand {
                         match manager.remove_sound(code).await {
                             Ok(()) => {
                                 tools
-                                    .reply(&format!("✅ Sound '{}' removed from database and file deleted from disk", code))
+                                    .reply(&format!(" Sound '{}' removed from database and file deleted from disk", code))
                                     .await?;
                             }
                             Err(e) => {
                                 tools
-                                    .reply(&format!("❌ Failed to remove sound '{}': {}", code, e))
+                                    .reply(&format!(" Failed to remove sound '{}': {}", code, e))
                                     .await?;
                             }
                         }
                     } else {
-                        tools.reply("❌ Sounds manager not available").await?;
+                        tools.reply(" Sounds manager not available").await?;
                     }
                 }
             }
             "stopall" => {
                 tools.stop_all_streams().await?;
-                tools.reply("🛑 Stopped all audio streams").await?;
+                tools.reply(" Stopped all audio streams").await?;
             }
             _ => {
-                tools.reply("❌ Unknown command. Use `!sound` (without arguments) to see available commands.").await?;
+                tools.reply(" Unknown command. Use `!sound` (without arguments) to see available commands.").await?;
             }
         }
 

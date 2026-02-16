@@ -33,8 +33,8 @@ impl From<protobuf::Error> for Error {
     }
 }
 
-impl From<sea_orm::DbErr> for Error {
-    fn from(err: sea_orm::DbErr) -> Self {
+impl From<rusqlite::Error> for Error {
+    fn from(err: rusqlite::Error) -> Self {
         Error::DatabaseError(format!("Database error: {}", err))
     }
 }

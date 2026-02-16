@@ -19,7 +19,7 @@ use config::BotConfig;
 use std::error::Error;
 
 #[derive(Parser)]
-#[command(name = "bigbot", version = "0.1.0", author = "Justin Stanley")]
+#[command(name = "threebot", version = "0.1.0", author = "Justin Stanley")]
 struct Cli {
     #[arg(short, long, help = "Enable verbose output (overrides config)")]
     verbose: bool,
@@ -30,7 +30,7 @@ struct Cli {
     #[arg(
         short,
         long,
-        help = "Configuration file path (default: ~/.bigbot/config.yml)"
+        help = "Configuration file path (default: ~/.threebot/config.yml)"
     )]
     config: Option<String>,
 }
@@ -52,16 +52,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     config.apply_cli_overrides(if cli.verbose { Some(true) } else { None }, cli.data_dir);
 
     // Set up logging based on configuration
-    use tracing_subscriber::{fmt, EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-    
+    use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
     // Create base filter - disable SQL logging by default
     let base_level = if config.bot.verbose { "debug" } else { "info" };
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            // Default filter: use base level but silence SQL logs unless explicitly enabled
-            format!("{},sea_orm::query=warn,sqlx=warn", base_level).into()
-        });
-    
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // Default filter: use base level but silence SQL logs unless explicitly enabled
+        format!("{},rusqlite=warn,r2d2=warn", base_level).into()
+    });
+
     tracing_subscriber::registry()
         .with(filter)
         .with(
@@ -70,11 +69,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .with_target(true)
                 .with_thread_ids(false)
                 .with_file(false)
-                .with_line_number(false)
+                .with_line_number(false),
         )
         .init();
 
-    info!("Starting Big Bot v{}", env!("CARGO_PKG_VERSION"));
+    info!("Starting Threebot v{}", env!("CARGO_PKG_VERSION"));
     info!("Using configuration from: {}", config_path.display());
 
     let data_dir = config.get_data_dir();

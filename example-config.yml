@@ -1,11 +1,11 @@
-# Big Bot Configuration File
-# This file contains all the settings for the Big Bot Mumble bot.
+# Threebot Configuration File
+# This file contains all the settings for the Threebot Mumble bot.
 # You can override most of these settings using command-line arguments.
 
 # Bot-specific settings
 bot:
   # The username the bot will use when connecting to the server
-  username: "Big Bot"
+  username: "Threebot"
   # Optional password for server authentication (leave as null if not needed)
   password: null
   # Enable verbose logging (can be overridden with --verbose)
@@ -84,7 +84,7 @@ external_tools:
 # File and directory paths
 paths:
   # Directory to store bot data (sounds, database, certificates, etc.)
-  # If null, defaults to ~/.bigbot
+  # If null, defaults to ~/.THREEBOT
   data_dir: null
   # Path to SSL certificate file (if null, uses data_dir/cert.pem)
   cert_file: null
@@ -92,3 +92,4 @@ paths:
   key_file: null
   # Directory for trusted server certificates (if null, uses data_dir/trusted_certificates)
   trusted_certs_dir: null
+

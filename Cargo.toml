@@ -1,5 +1,5 @@
 [package]
-name = "bigbot"
+name = "threebot"
 version = "0.1.0"
 edition = "2024"
 
@@ -16,9 +16,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "time"]
 tracing-log = "0.2"
 protobuf = "3.7.2"
 rand = "0.8"
+rusqlite = { version = "0.37.0", features = ["bundled", "chrono"] }
+r2d2 = "0.8.10"
+r2d2_sqlite = "0.31.0"
 rustls = "0.23.28"
 rustls-pki-types = "1.12.0"
-sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros", "with-chrono"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 sha2 = "0.10.9"

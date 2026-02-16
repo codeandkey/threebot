@@ -159,7 +159,7 @@ impl Default for BotConfig {
     fn default() -> Self {
         Self {
             bot: BotSettings {
-                username: "Big Bot".to_string(),
+                username: "Threebot".to_string(),
                 password: None,
                 verbose: false,
             },
@@ -189,8 +189,8 @@ impl Default for BotConfig {
                 pitch_down_cents: -200,
                 bass_boost_frequency_hz: 50.0,
                 bass_boost_gain_db: 25.0,
-                reverb_room_size: 1.0,  // Was 0.5, now 1.0 to match "100" parameter
-                reverb_damping: 1.0,    // Was 0.5, now 1.0 to match "100" parameter
+                reverb_room_size: 1.0, // Was 0.5, now 1.0 to match "100" parameter
+                reverb_damping: 1.0,   // Was 0.5, now 1.0 to match "100" parameter
                 echo_delay_ms: 300,
                 echo_feedback: 0.3,
                 muffle_cutoff_frequency_hz: 1000.0, // Default cutoff frequency for low-pass filter
@@ -243,14 +243,14 @@ impl BotConfig {
 
     /// Get the content of the example configuration
     fn get_example_config_content() -> String {
-        r#"# Big Bot Configuration File
-# This file contains all the settings for the Big Bot Mumble bot.
+        r#"# Threebot Configuration File
+# This file contains all the settings for the Threebot Mumble bot.
 # You can override most of these settings using command-line arguments.
 
 # Bot-specific settings
 bot:
   # The username the bot will use when connecting to the server
-  username: "Big Bot"
+  username: "Threebot"
   # Optional password for server authentication (leave as null if not needed)
   password: null
   # Enable verbose logging (can be overridden with --verbose)
@@ -320,17 +320,10 @@ audio_effects:
   # Low-pass filter cutoff frequency for 'muffle' effect (in Hz)
   muffle_cutoff_frequency_hz: 1000
 
-# External tools configuration
-external_tools:
-  # Path to cookies file for yt-dlp (supports ~ for home directory)
-  # Example: "~/cookies.txt" or "/path/to/cookies.txt"
-  # If null, no cookies will be passed to yt-dlp
-  ytdlp_cookies_file: null
-
 # File and directory paths
 paths:
   # Directory to store bot data (sounds, database, certificates, etc.)
-  # If null, defaults to ~/.bigbot
+  # If null, defaults to ~/.threebot
   data_dir: null
   # Path to SSL certificate file (if null, uses data_dir/cert.pem)
   cert_file: null
@@ -394,7 +387,7 @@ external_tools:
         } else {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join(".bigbot")
+                .join(".threebot")
         }
     }
 
@@ -428,7 +421,7 @@ external_tools:
     /// Get the configuration file path for the bot
     pub fn get_config_path() -> PathBuf {
         let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        home_dir.join(".bigbot").join("config.yml")
+        home_dir.join(".threebot").join("config.yml")
     }
 
     /// Merge command-line overrides into the configuration
@@ -450,7 +443,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = BotConfig::default();
-        assert_eq!(config.bot.username, "Big Bot");
+        assert_eq!(config.bot.username, "Threebot");
         assert_eq!(config.server.host, "localhost");
         assert_eq!(config.server.port, 64738);
         assert!(matches!(config.behavior.auto_greetings, GreetingMode::All));

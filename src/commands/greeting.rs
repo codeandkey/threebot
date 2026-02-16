@@ -17,7 +17,7 @@ impl Command for GreetingCommand {
             Some(id) => id,
             None => {
                 tools
-                    .reply("❌ Unable to identify user for greeting command")
+                    .reply(" Unable to identify user for greeting command")
                     .await?;
                 return Ok(());
             }
@@ -29,14 +29,14 @@ impl Command for GreetingCommand {
                 Some(name) if !name.is_empty() => name.clone(),
                 _ => {
                     tools
-                        .reply("❌ Unable to get valid username for greeting command")
+                        .reply(" Unable to get valid username for greeting command")
                         .await?;
                     return Ok(());
                 }
             },
             None => {
                 tools
-                    .reply("❌ Unable to find user information for greeting command")
+                    .reply(" Unable to find user information for greeting command")
                     .await?;
                 return Ok(());
             }
@@ -48,24 +48,22 @@ impl Command for GreetingCommand {
                 match user_settings_manager.clear_greeting(&username).await {
                     Ok(true) => {
                         tools
-                            .reply("✅ Your greeting command has been removed")
+                            .reply(" Your greeting command has been removed")
                             .await?;
                     }
                     Ok(false) => {
                         tools
-                            .reply("❌ You don't have a greeting command set to remove")
+                            .reply(" You don't have a greeting command set to remove")
                             .await?;
                     }
                     Err(e) => {
                         tools
-                            .reply(&format!("❌ Error removing greeting command: {}", e))
+                            .reply(&format!(" Error removing greeting command: {}", e))
                             .await?;
                     }
                 }
             } else {
-                tools
-                    .reply("❌ User settings manager not available")
-                    .await?;
+                tools.reply(" User settings manager not available").await?;
             }
         } else {
             // Set the user's greeting command
@@ -84,22 +82,17 @@ impl Command for GreetingCommand {
                     Ok(()) => {
                         // Show the user what was actually stored (with the !)
                         tools
-                            .reply(&format!(
-                                "✅ Greeting command set to: `{}`",
-                                greeting_command
-                            ))
+                            .reply(&format!(" Greeting command set to: `{}`", greeting_command))
                             .await?;
                     }
                     Err(e) => {
                         tools
-                            .reply(&format!("❌ Error setting greeting command: {}", e))
+                            .reply(&format!(" Error setting greeting command: {}", e))
                             .await?;
                     }
                 }
             } else {
-                tools
-                    .reply("❌ User settings manager not available")
-                    .await?;
+                tools.reply(" User settings manager not available").await?;
             }
         }
 

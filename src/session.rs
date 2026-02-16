@@ -1,7 +1,9 @@
 use crate::{
     audio::{AudioMixer, AudioMixerTask},
     commands::{CommandContext, Executor, SessionTools},
-    config::{AudioEffectSettings, BehaviorSettings, ExternalToolsSettings, FarewellMode, GreetingMode},
+    config::{
+        AudioEffectSettings, BehaviorSettings, ExternalToolsSettings, FarewellMode, GreetingMode,
+    },
     error::Error,
     protos::{self, generated::Mumble::CryptSetup},
 };
@@ -205,40 +207,41 @@ pub struct Session {
     behavior_settings: BehaviorSettings,
     audio_effects: AudioEffectSettings,
     external_tools: ExternalToolsSettings,
-    sound_history: std::sync::Mutex<std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>>,
+    sound_history:
+        std::sync::Mutex<std::collections::VecDeque<(String, chrono::DateTime<chrono::Utc>)>>,
 }
 
 impl Session {
-    /// Get the bigbot configuration paths
-    fn get_bigbot_paths_from_dir(
+    /// Get the threebot configuration paths
+    fn get_threebot_paths_from_dir(
         data_dir: Option<&str>,
     ) -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), Error> {
-        let bigbot_dir = if let Some(dir) = data_dir {
+        let threebot_dir = if let Some(dir) = data_dir {
             std::path::PathBuf::from(dir)
         } else {
             // Get home directory using dirs crate for cross-platform compatibility
             let home_dir = dirs::home_dir().ok_or_else(|| {
                 Error::ConnectionError("Unable to determine home directory".to_string())
             })?;
-            home_dir.join(".bigbot")
+            home_dir.join(".threebot")
         };
 
-        let sounds_dir = bigbot_dir.join("sounds");
-        let database_path = bigbot_dir.join("database.sql");
-        let trusted_certs_dir = bigbot_dir.join("trusted_certificates");
+        let sounds_dir = threebot_dir.join("sounds");
+        let database_path = threebot_dir.join("database.sql");
+        let trusted_certs_dir = threebot_dir.join("trusted_certificates");
 
-        // Ensure the .bigbot directory exists
-        std::fs::create_dir_all(&bigbot_dir).map_err(|e| {
-            Error::ConnectionError(format!("Failed to create .bigbot directory: {}", e))
+        // Ensure the .threebot directory exists
+        std::fs::create_dir_all(&threebot_dir).map_err(|e| {
+            Error::ConnectionError(format!("Failed to create .threebot directory: {}", e))
         })?;
 
         Ok((sounds_dir, database_path, trusted_certs_dir))
     }
 
-    /// Get the bigbot configuration paths (using default ~/.bigbot)
-    fn get_bigbot_paths()
+    /// Get the threebot configuration paths (using default ~/.threebot)
+    fn get_threebot_paths()
     -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), Error> {
-        Self::get_bigbot_paths_from_dir(None)
+        Self::get_threebot_paths_from_dir(None)
     }
 
     pub async fn new(options: ConnectionOptions) -> Result<Self, Error> {
@@ -292,7 +295,7 @@ impl Session {
 
         // Initialize paths
         let (sounds_dir, database_path, trusted_certs_dir) =
-            Self::get_bigbot_paths_from_dir(options.data_dir.as_deref())?;
+            Self::get_threebot_paths_from_dir(options.data_dir.as_deref())?;
 
         let config = ClientConfig::builder()
             .dangerous()
@@ -365,7 +368,11 @@ impl Session {
 
         info!("Sent authenticate message to server");
 
-        let audio_mixer = AudioMixer::spawn(writer_task.sender.clone(), &options.behavior_settings, &options.audio_effects);
+        let audio_mixer = AudioMixer::spawn(
+            writer_task.sender.clone(),
+            &options.behavior_settings,
+            &options.audio_effects,
+        );
 
         // Initialize database manager
         let database_manager = match crate::database::DatabaseManager::new(&database_path).await {
@@ -382,23 +389,21 @@ impl Session {
         };
 
         // Initialize sounds manager
-        let sounds_manager = match crate::sounds::SoundsManager::new(
-            database_manager.connection_clone(),
-            sounds_dir,
-        ) {
-            Ok(manager) => {
-                info!("Sounds manager initialized successfully");
-                Some(Arc::new(manager))
-            }
-            Err(e) => {
-                warn!("Failed to initialize sounds manager: {}", e);
-                None
-            }
-        };
+        let sounds_manager =
+            match crate::sounds::SoundsManager::new(database_manager.pool_clone(), sounds_dir) {
+                Ok(manager) => {
+                    info!("Sounds manager initialized successfully");
+                    Some(Arc::new(manager))
+                }
+                Err(e) => {
+                    warn!("Failed to initialize sounds manager: {}", e);
+                    None
+                }
+            };
 
         // Initialize alias manager
         let alias_manager = {
-            let manager = crate::alias::AliasManager::new(database_manager.connection_clone());
+            let manager = crate::alias::AliasManager::new(database_manager.pool_clone());
             info!("Alias manager initialized successfully");
             Some(Arc::new(manager))
         };
@@ -406,7 +411,7 @@ impl Session {
         // Initialize user settings manager
         let user_settings_manager = {
             let manager =
-                crate::user_settings::UserSettingsManager::new(database_manager.connection_clone());
+                crate::user_settings::UserSettingsManager::new(database_manager.pool_clone());
             info!("User settings manager initialized successfully");
             Some(Arc::new(manager))
         };
@@ -760,7 +765,7 @@ impl Session {
                             Err(e) => {
                                 warn!("Command execution failed: {}", e);
                                 // Send error message back to user
-                                let error_msg = format!("Command error: {}", e);
+                                let error_msg = format!("error: {}", e);
                                 if let Err(reply_err) =
                                     self.send_error_reply(&error_msg, actor_id).await
                                 {
@@ -802,7 +807,11 @@ impl Session {
     }
 
     async fn send_error_reply(&self, error_msg: &str, actor_id: u32) -> Result<(), Error> {
-        self.send_private_message(actor_id, error_msg).await
+        let html = format!(
+            "<span style=\"color: #ff4d4f;\">error: {}</span>",
+            markdown_to_html(error_msg.trim_start_matches("error:").trim_start())
+        );
+        self.send_private_message(actor_id, &html).await
     }
 
     /// Attempts to set the current channel ID from our user state
@@ -1218,7 +1227,7 @@ impl SessionTools for Session {
         if let Ok(mut history) = self.sound_history.lock() {
             let now = chrono::Utc::now();
             history.push_front((sound_code.to_string(), now));
-            
+
             // Keep only the last 50 entries to prevent unlimited growth
             while history.len() > 50 {
                 history.pop_back();

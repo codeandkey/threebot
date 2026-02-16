@@ -1,7 +1,7 @@
-# BigBot - Advanced Mumble Voice Chat Bot
+# threebot - Advanced Mumble Voice Chat Bot
 
-[![Rust](https://github.com/codeandkey/bigbot/actions/workflows/ci.yml/badge.svg)](https://github.com/codeandkey/bigbot/actions/workflows/ci.yml)
-[![Release](https://github.com/codeandkey/bigbot/actions/workflows/release.yml/badge.svg)](https://github.com/codeandkey/bigbot/actions/workflows/release.yml)
+[![Rust](https://github.com/codeandkey/threebot/actions/workflows/ci.yml/badge.svg)](https://github.com/codeandkey/threebot/actions/workflows/ci.yml)
+[![Release](https://github.com/codeandkey/threebot/actions/workflows/release.yml/badge.svg)](https://github.com/codeandkey/threebot/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A high-performance Mumble voice chat bot written in Rust with sound management, user personalization, and extensive customization options.
@@ -25,30 +25,30 @@ A high-performance Mumble voice chat bot written in Rust with sound management, 
 
 **From Releases:**
 ```bash
-wget https://github.com/codeandkey/bigbot/releases/latest/download/bigbot-linux-x86_64.tar.gz
-tar -xzf bigbot-linux-x86_64.tar.gz
-chmod +x bigbot
+wget https://github.com/codeandkey/threebot/releases/latest/download/threebot-linux-x86_64.tar.gz
+tar -xzf threebot-linux-x86_64.tar.gz
+chmod +x threebot
 ```
 
 **From Source:**
 ```bash
-git clone https://github.com/codeandkey/bigbot.git
-cd bigbot
+git clone https://github.com/codeandkey/threebot.git
+cd threebot
 cargo build --release
 ```
 
 ### First Run
 ```bash
-./bigbot  # Creates ~/.bigbot/config.yml automatically
+./threebot  # Creates ~/.threebot/config.yml automatically
 ```
 
 ## Configuration
 
-Basic configuration in `~/.bigbot/config.yml`:
+Basic configuration in `~/.threebot/config.yml`:
 
 ```yaml
 bot:
-  username: "Big Bot"
+  username: "Threebot"
   password: null
 
 server:
@@ -97,13 +97,7 @@ cargo install cargo-watch
 cargo watch -x 'run -- --verbose'
 ```
 
-## Docker
-
-```bash
-docker build -t bigbot .
-docker run -v $HOME/.bigbot:/root/.bigbot bigbot
-```
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
