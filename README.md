@@ -1,103 +1,50 @@
-# threebot - Advanced Mumble Voice Chat Bot
+# threebot
 
 [![Rust](https://github.com/codeandkey/threebot/actions/workflows/ci.yml/badge.svg)](https://github.com/codeandkey/threebot/actions/workflows/ci.yml)
-[![Release](https://github.com/codeandkey/threebot/actions/workflows/release.yml/badge.svg)](https://github.com/codeandkey/threebot/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A high-performance Mumble voice chat bot written in Rust with sound management, user personalization, and extensive customization options.
+`threebot` is a realtime Mumble bot written in Rust.  
+It lets users pull short audio clips from public sources (YouTube, Instagram, Reddit, and similar links), store them, and play them back to a Mumble server with optional effects.
 
-## Features
+## What It Does
 
-- **Sound Management**: Play sounds from database, pull audio from URLs (YouTube, etc.)
-- **User Personalization**: Custom greetings/farewells with 3-mode system (all/custom/none)
-- **Command Aliases**: Create shortcuts for complex command sequences
-- **Audio Effects**: Real-time audio processing with multiple effects
-- **Private Messages**: Configurable private command support
-- **Auto-reconnection**: Reliable session management with error recovery
+- Connects to a Mumble server and plays audio in realtime
+- Extracts clips from URLs via `!sound pull <url> <start> <length>`
+- Stores clips for reuse and playback by code
+- Applies live effects (loud, fast, slow, phone, reverb, echo, pitch, bass, reverse, muffle)
+- Supports aliases plus user greeting/farewell commands
 
 ## Quick Start
 
-### Prerequisites
-- Rust 1.70+
-- FFmpeg (for audio processing)
+Prerequisites:
 
-### Installation
+- Rust
+- `ffmpeg`
+- `yt-dlp`
 
-**From Releases:**
-```bash
-wget https://github.com/codeandkey/threebot/releases/latest/download/threebot-linux-x86_64.tar.gz
-tar -xzf threebot-linux-x86_64.tar.gz
-chmod +x threebot
-```
+Run from source:
 
-**From Source:**
 ```bash
 git clone https://github.com/codeandkey/threebot.git
 cd threebot
-cargo build --release
+cargo run --release
 ```
 
-### First Run
-```bash
-./threebot  # Creates ~/.threebot/config.yml automatically
-```
+First run creates config at `~/.threebot/config.yml`.
 
-## Configuration
-
-Basic configuration in `~/.threebot/config.yml`:
-
-```yaml
-bot:
-  username: "Threebot"
-  password: null
-
-server:
-  host: "localhost"
-  port: 64738
-
-behavior:
-  auto_greetings: all    # all/custom/none
-  auto_farewells: custom
-  allow_private_commands: true
-  volume: 1.0
-```
-
-## Commands
-
-### Sound Management
-```bash
-!sound play [code]         # Play random or specific sound
-!sound list               # Show available sounds
-!sound pull <URL> <start> <length>  # Extract audio from URLs
-!sound info <code>        # Sound details
-```
-
-### User Personalization
-```bash
-!greeting <command>       # Set join greeting
-!farewell <command>       # Set leave farewell
-```
-
-### Aliases
-```bash
-!alias <name> <command>   # Create alias
-!alias list              # Show aliases
-!alias search <term>     # Search aliases
-```
-
-## Development
+## Core Commands
 
 ```bash
-# Build and test
-cargo build --release
-cargo test
-
-# Development with hot reload
-cargo install cargo-watch
-cargo watch -x 'run -- --verbose'
+!sound pull <url> <start> <length>   # Create a clip from a public source
+!sound play [code] [+effects...]     # Play random/specific sound with optional effects
+!sound list [page]                   # List sounds
+!sound info <code>                   # Show metadata
+!sound remove <code>                 # Delete sound
+!alias <name> <command...>           # Create alias
+!greeting <command...>               # Set join command
+!farewell <command...>               # Set leave command
 ```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
+MIT. See `LICENSE`.
